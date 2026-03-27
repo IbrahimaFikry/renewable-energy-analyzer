@@ -1,0 +1,4 @@
+cluster_label,score_market_opportunity_mean,score_market_opportunity_std,score_decarbonization_opportunity_mean,score_decarbonization_opportunity_std,score_business_environment_mean,score_business_environment_std,score_energy_security_mean,score_energy_security_std,total_score_mean,total_score_std,n_countries
+Ready Markets,63.2,4.2,82.0,4.2,99.5,0.7,75.4,3.3,79.5,2.8,2
+Transition Markets,37.7,7.0,55.1,12.7,55.8,8.5,59.8,28.8,50.2,6.0,11
+Watch & Wait,34.3,7.2,26.9,10.4,26.1,15.6,69.6,18.8,31.1,7.8,7

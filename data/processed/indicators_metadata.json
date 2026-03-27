@@ -1,0 +1,23 @@
+{
+  "ingestion_timestamp": "2026-03-27T19:12:48.364517",
+  "years": "see config",
+  "aggregation": "6-year mean",
+  "n_countries": 20,
+  "n_indicators": 14,
+  "indicators": [
+    "gdp_growth_per_capita",
+    "electricity_consumption",
+    "population_growth",
+    "urbanization_rate",
+    "energy_use_per_capita",
+    "fossil_fuel_consumption",
+    "renewable_energy_gap",
+    "electricity_access",
+    "political_stability",
+    "regulatory_quality",
+    "rule_of_law",
+    "control_of_corruption",
+    "energy_imports",
+    "alternative_nuclear_energy"
+  ]
+}

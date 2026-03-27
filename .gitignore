@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Data files (optional - comment out if you want to include sample data)
+data/raw/
+data/processed/
+
+# Outputs (optional - comment out if you want to include sample outputs)
+outputs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter
+.jupyter_cache/
+.Rhistory
+
+# Optional: exclude raw data if you don't want to commit large files
+# data/raw/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Environment variables
+.env

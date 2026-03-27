@@ -1,0 +1,63 @@
+------------------------------------------------------------
+RENEWABLE ENERGY INVESTMENT ANALYZER
+Executive Summary — Emerging Markets Clean Power Opportunity
+------------------------------------------------------------
+Date:      2026-03-27 19:12
+Period:    2018–2023 (6-year means)
+Countries: 20 across 3 regions
+Indicators: 13 (updated: modern renewables, fossil electricity share, fuel imports)
+
+Archetype thresholds: Ready Markets (≥70) · Transition (40–70) · Watch & Wait (<40)
+
+------------------------------------------------------------
+TOP 5 INVESTMENT OPPORTUNITIES
+------------------------------------------------------------
+  1. MYS (SEA)
+     Score: 81.5/100   Archetype: Ready Markets
+  2. CHL (LatAm)
+     Score: 77.5/100   Archetype: Ready Markets
+  3. THA (SEA)
+     Score: 62.4/100   Archetype: Transition Markets
+  4. VNM (SEA)
+     Score: 58.0/100   Archetype: Transition Markets
+  5. MEX (LatAm)
+     Score: 54.2/100   Archetype: Transition Markets
+
+------------------------------------------------------------
+MARKET ARCHETYPES
+------------------------------------------------------------
+  Ready Markets  (n=2, avg 79.5, range 77.5–81.5)
+    MYS, CHL
+  Transition Markets  (n=11, avg 50.2, range 43.3–62.4)
+    THA, VNM, MEX, BRA, IDN + 6 more
+  Watch & Wait  (n=7, avg 31.1, range 16.8–39.3)
+    BGD, CIV, KHM, KEN, TZA + 2 more
+
+------------------------------------------------------------
+REGIONAL SUMMARY
+------------------------------------------------------------
+  LatAm: 55.9 avg  (5 countries)
+  SEA: 53.0 avg  (7 countries)
+  Africa: 34.9 avg  (8 countries)
+
+------------------------------------------------------------
+RANK STABILITY
+------------------------------------------------------------
+  Stability across 4 investor scenarios:
+    Very High: 16 markets (80%)
+    High: 3 markets (15%)
+    Medium: 1 markets (5%)
+
+  Perfectly stable markets (rank unchanged across all scenarios):
+    MYS, CHL, PER, NGA
+
+------------------------------------------------------------
+OUTPUT FILES
+------------------------------------------------------------
+  data/processed/indicators.csv             6-year means (13 indicators)
+  data/processed/normalized_indicators.csv  0-100 normalised scores
+  outputs/market_scores.csv                  Balanced scenario scores
+  outputs/sensitivity_analysis.csv           Cross-scenario comparison (4 scenarios)
+  outputs/market_clusters.csv                Cluster assignments (threshold-based)
+  outputs/executive_summary.txt              This file
+------------------------------------------------------------

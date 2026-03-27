@@ -1,0 +1,12 @@
+dash==4.0.0
+matplotlib==3.10.8
+numpy==2.4.3
+pandas==3.0.1
+plotly==6.6.0
+PyYAML==6.0.3
+scikit_learn==1.8.0
+scipy==1.17.1
+seaborn==0.13.2
+tenacity==9.1.4
+wbgapi==1.0.12
+gunicorn==23.0.0

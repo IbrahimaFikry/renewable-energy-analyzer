@@ -1,0 +1,188 @@
+# config.yaml
+# -----------
+# Renewable Energy Investment Analyzer — project configuration
+# Business case: European renewable energy developer screening emerging
+# markets for solar/wind investment and grid infrastructure deployment.
+
+# ── Project metadata ───────────────────────────────────────────────────────
+project:
+  name:    Renewable Energy Market Analyzer
+  version: 3.0
+  sector:  Renewable Energy & Clean Power
+  client:  European Clean Energy Developer
+
+# ── Markets ────────────────────────────────────────────────────────────────
+# 20 emerging markets across three regions. ISO-3 codes throughout.
+countries:
+  SEA:
+    - VNM   # Vietnam
+    - IDN   # Indonesia
+    - PHL   # Philippines
+    - THA   # Thailand
+    - MYS   # Malaysia
+    - KHM   # Cambodia
+    - BGD   # Bangladesh
+  Africa:
+    - KEN   # Kenya
+    - NGA   # Nigeria
+    - GHA   # Ghana
+    - ETH   # Ethiopia
+    - TZA   # Tanzania
+    - SEN   # Senegal
+    - CIV   # Côte d'Ivoire
+    - MAR   # Morocco
+  LatAm:
+    - BRA   # Brazil
+    - MEX   # Mexico
+    - COL   # Colombia
+    - PER   # Peru
+    - CHL   # Chile
+
+# ── Weight scenarios ───────────────────────────────────────────────────────
+# Four investor philosophies tested in sensitivity analysis.
+# Weights must sum to 1.0 per scenario.
+# Energy Security is fixed at 0.05 across all scenarios —
+# it acts as a tiebreaker rather than a primary driver.
+weight_scenarios:
+
+  balanced:
+    # Neutral reference scenario; no single dimension dominates.
+    market_opportunity:          0.30
+    decarbonization_opportunity: 0.45
+    business_environment:        0.20
+    energy_security:             0.05
+
+  growth_focused:
+    # Favours large, fast-growing energy markets (commercial funds, utilities).
+    market_opportunity:          0.55
+    decarbonization_opportunity: 0.25
+    business_environment:        0.15
+    energy_security:             0.05
+
+  impact_first:
+    # Maximises fossil-fuel replacement potential (DFIs, climate-impact funds).
+    market_opportunity:          0.20
+    decarbonization_opportunity: 0.60
+    business_environment:        0.15
+    energy_security:             0.05
+
+  risk_averse:
+    # Prioritises institutional quality (pension funds, insurance-backed capital).
+    market_opportunity:          0.25
+    decarbonization_opportunity: 0.30
+    business_environment:        0.40
+    energy_security:             0.05
+
+# ── Indicators ─────────────────────────────────────────────────────────────
+# All sourced from World Bank Open Data API (2018–2023 average).
+# direction: higher_is_better | lower_is_better
+# weight:    relative weight within dimension (must sum to 1.0 per dimension)
+indicators:
+
+  market_opportunity:
+    gdp_growth_per_capita:
+      description:  "GDP per capita growth rate — market expansion trajectory"
+      wb_indicator: "NY.GDP.PCAP.KD.ZG"
+      direction:    higher_is_better
+      weight:       0.30
+
+    electricity_consumption:
+      description:  "Electric power consumption per capita (kWh) — energy market size"
+      wb_indicator: "EG.USE.ELEC.KH.PC"
+      direction:    higher_is_better
+      weight:       0.35
+
+    population_growth:
+      description:  "Annual population growth rate — long-run demand driver"
+      wb_indicator: "SP.POP.GROW"
+      direction:    higher_is_better
+      weight:       0.20
+
+    urbanization_rate:
+      description:  "Urban population as % of total — urban energy demand concentration"
+      wb_indicator: "SP.URB.TOTL.IN.ZS"
+      direction:    higher_is_better
+      weight:       0.15
+
+  decarbonization_opportunity:
+    energy_use_per_capita:
+      description:  "Energy consumption per capita — proxy for carbon intensity"
+      wb_indicator: "EG.USE.PCAP.KG.OE"
+      direction:    higher_is_better
+      weight:       0.35
+
+    fossil_fuel_consumption:
+      description:  "Fossil fuel energy consumption (% of total) — replacement opportunity"
+      wb_indicator: "EG.USE.COMM.FO.ZS"
+      direction:    higher_is_better
+      weight:       0.30
+
+    renewable_energy_gap:
+      description:  "Renewable energy consumption (% of total) — lower = higher growth runway"
+      wb_indicator: "EG.FEC.RNEW.ZS"
+      direction:    lower_is_better
+      weight:       0.25
+
+    electricity_access:
+      description:  "Access to electricity (% of population) — infrastructure maturity signal"
+      wb_indicator: "EG.ELC.ACCS.ZS"
+      direction:    higher_is_better
+      weight:       0.10
+
+  business_environment:
+    political_stability:
+      description:  "Political Stability and Absence of Violence/Terrorism — project execution risk"
+      wb_indicator: "PV.EST"
+      direction:    higher_is_better
+      weight:       0.30
+
+    regulatory_quality:
+      description:  "Regulatory Quality — ability to formulate and implement sound policies"
+      wb_indicator: "RQ.EST"
+      direction:    higher_is_better
+      weight:       0.30
+
+    rule_of_law:
+      description:  "Rule of Law — contract enforcement and property rights"
+      wb_indicator: "RL.EST"
+      direction:    higher_is_better
+      weight:       0.25
+
+    control_of_corruption:
+      description:  "Control of Corruption — procurement integrity"
+      wb_indicator: "CC.EST"
+      direction:    higher_is_better
+      weight:       0.15
+
+  energy_security:
+    energy_imports:
+      description:  "Net energy imports (% of energy use) — import dependency"
+      wb_indicator: "EG.IMP.CONS.ZS"
+      direction:    higher_is_better
+      weight:       0.60
+
+    alternative_nuclear_energy:
+      description:  "Alternative and nuclear energy (% of total) — lower = higher renewable need"
+      wb_indicator: "EG.USE.COMM.CL.ZS"
+      direction:    lower_is_better
+      weight:       0.40
+
+# ── Data settings ──────────────────────────────────────────────────────────
+data:
+  year_range:
+    start: 2018
+    end:   2023
+
+# ── Clustering settings ────────────────────────────────────────────────────
+# k=3 produces the three archetypes used throughout the report and dashboard:
+#   Ready Markets · Transition Markets · Watch & Wait
+# Changing k here requires updating CLUSTER_LABELS in clustering.py.
+clustering:
+  n_clusters:   3
+  random_state: 42
+
+# ── Output paths ───────────────────────────────────────────────────────────
+outputs:
+  scores_file:      "outputs/market_scores.csv"
+  clusters_file:    "outputs/market_clusters.csv"
+  sensitivity_file: "outputs/sensitivity_analysis.csv"

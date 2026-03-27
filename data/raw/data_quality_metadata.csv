@@ -1,0 +1,15 @@
+indicator,dimension,wb_code,period,avg_completeness_%,countries_complete,countries_partial,countries_missing
+gdp_growth_per_capita,market_opportunity,NY.GDP.PCAP.KD.ZG,2018–2023,100.0,20,0,0
+electricity_consumption,market_opportunity,EG.USE.ELEC.KH.PC,2018–2023,90.8,9,11,0
+population_growth,market_opportunity,SP.POP.GROW,2018–2023,100.0,20,0,0
+urbanization_rate,market_opportunity,SP.URB.TOTL.IN.ZS,2018–2023,100.0,20,0,0
+energy_use_per_capita,decarbonization_opportunity,EG.USE.PCAP.KG.OE,2018–2023,90.8,9,11,0
+fossil_fuel_consumption,decarbonization_opportunity,EG.USE.COMM.FO.ZS,2018–2023,90.8,9,11,0
+renewable_energy_gap,decarbonization_opportunity,EG.FEC.RNEW.ZS,2018–2023,100.0,20,0,0
+electricity_access,decarbonization_opportunity,EG.ELC.ACCS.ZS,2018–2023,100.0,20,0,0
+political_stability,business_environment,PV.EST,2018–2023,100.0,20,0,0
+regulatory_quality,business_environment,RQ.EST,2018–2023,100.0,20,0,0
+rule_of_law,business_environment,RL.EST,2018–2023,100.0,20,0,0
+control_of_corruption,business_environment,CC.EST,2018–2023,100.0,20,0,0
+energy_imports,energy_security,EG.IMP.CONS.ZS,2018–2023,88.3,9,11,0
+alternative_nuclear_energy,energy_security,EG.USE.COMM.CL.ZS,2018–2023,90.8,9,11,0

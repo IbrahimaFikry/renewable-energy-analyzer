@@ -1,0 +1,3597 @@
+---
+title: "WHERE TO INVEST IN RENEWABLE ENERGY? MACRO-LEVEL MARKET SCREEN"
+subtitle: "A Quantitative Market Prioritization Framework"
+author: "Ibrahima Fikry Diallo"
+date: today
+toc: true
+toc-location: left
+toc-depth: 3
+toc-title: "Contents"
+format:
+  html:
+    include-after-body: footer.html
+    df-print: paged
+    code-fold: true
+    code-tools: true
+    code-link: true
+    smooth-scroll: true
+    code-overflow: wrap
+    code-summary: "Show Code"
+    self-contained: true
+    grid:
+      margin-width: 280px
+      body-width: 920px
+      sidebar-width: 210px
+    theme: cosmo
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: true
+reference-location: margin
+citation-location: margin
+title-block-banner: "#151931"
+title-block-banner-color: "#D4A96A"
+---
+
+```{python}
+#| echo: false
+#| output: false
+
+# ── Dependencies ───────────────────────────────────────────────────────────
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# ── Load pipeline outputs ──────────────────────────────────────────────────
+# Pipeline must have been run before rendering this report
+clusters_df = pd.read_csv('outputs/market_clusters.csv', index_col='country_code')
+sensitivity_df = pd.read_csv('outputs/sensitivity_analysis.csv', index_col='country_code')
+
+# ── Brand palette ──────────────────────────────────────────────────────────
+NAVY  = '#151931'
+GOLD  = '#D4A96A'
+GOLD2 = '#C8914D'
+
+DIM_COLORS = {
+    'market_opportunity':          '#1A6FA8',
+    'decarbonization_opportunity': NAVY,
+    'business_environment':        '#1C6B45',
+    'energy_security':             GOLD2,
+}
+
+CLUSTER_COLORS = {
+    'Ready Markets':      '#1C6B45',
+    'Transition Markets': GOLD2,
+    'Watch & Wait':       '#B03A2E',
+}
+
+COUNTRY_NAMES = {
+    'VNM': 'Vietnam',      'IDN': 'Indonesia',     'PHL': 'Philippines',
+    'THA': 'Thailand',     'MYS': 'Malaysia',      'KHM': 'Cambodia',
+    'BGD': 'Bangladesh',   'KEN': 'Kenya',         'NGA': 'Nigeria',
+    'GHA': 'Ghana',        'ETH': 'Ethiopia',      'TZA': 'Tanzania',
+    'SEN': 'Senegal',      'CIV': "Côte d'Ivoire", 'MAR': 'Morocco',
+    'BRA': 'Brazil',       'MEX': 'Mexico',        'COL': 'Colombia',
+    'PER': 'Peru',         'CHL': 'Chile',
+}
+
+# ── Shared Plotly layout ───────────────────────────────────────────────────
+LAYOUT = dict(
+    paper_bgcolor='white',
+    plot_bgcolor='white',
+    font=dict(family='Arial, sans-serif', color='#3D3D3D', size=12),
+    hoverlabel=dict(
+        bgcolor='white',
+        font_size=12,
+        font_family='Arial, sans-serif',
+    ),
+)
+
+# ── Shared pandas Styler table style ──────────────────────────────────────
+TABLE_STYLES = [
+    {'selector': 'thead th',
+     'props': [('background-color', NAVY), ('color', 'white'),
+               ('font-weight', '600'), ('font-size', '12px'),
+               ('padding', '10px 8px'), ('border-bottom', f'3px solid {GOLD}'),
+               ('text-align', 'left'), ('letter-spacing', '0.3px')]},
+    {'selector': 'tbody tr:nth-child(even)',
+     'props': [('background-color', '#F8F9FA')]},
+    {'selector': 'tbody tr:hover',
+     'props': [('background-color', '#EEF2F8')]},
+    {'selector': 'td',
+     'props': [('border-bottom', '1px solid #E5E9F0'),
+               ('padding', '9px 8px'), ('font-size', '13px')]},
+]
+
+# ── Helper: chart title + subtitle annotation ──────────────────────────────
+def chart_title_annotation(fig, title, subtitle=''):
+    """Adds a bold title and grey subtitle above the chart as annotations."""
+    annotations = list(fig.layout.annotations or [])
+    annotations.append(dict(
+        text=f'<b>{title}</b>',
+        xref='paper', yref='paper',
+        x=0, y=1.12, xanchor='left', yanchor='bottom',
+        font=dict(size=13, color=NAVY, family='Arial, sans-serif'),
+        showarrow=False,
+    ))
+    if subtitle:
+        annotations.append(dict(
+            text=subtitle,
+            xref='paper', yref='paper',
+            x=0, y=1.06, xanchor='left', yanchor='bottom',
+            font=dict(size=10.5, color='#888888', family='Arial, sans-serif'),
+            showarrow=False,
+        ))
+    fig.update_layout(annotations=annotations)
+    return fig
+
+# ── Helper: score cell background (0–100 bands) ───────────────────────────
+def score_bg(val):
+    """Traffic-light cell colour based on score magnitude."""
+    if not isinstance(val, (int, float)) or pd.isna(val):
+        return ''
+    if val >= 70:
+        return 'background-color: #D4EDDA; color: #0D4028; font-weight: 600'
+    if val >= 50:
+        return 'background-color: #FFF3CD; color: #5A3D00; font-weight: 600'
+    if val >= 30:
+        return 'background-color: #FDECEA; color: #7A1F1F; font-weight: 600'
+    return 'background-color: #F5C6CB; color: #4A0010; font-weight: 700'
+
+# ── Data preparation ───────────────────────────────────────────────────────
+clusters_df['country_name'] = clusters_df.index.map(COUNTRY_NAMES)
+sensitivity_df['country_name'] = sensitivity_df.index.map(COUNTRY_NAMES)
+
+# Normalise cluster labels for consistent lookup
+clusters_df['cluster_label'] = (
+    clusters_df['cluster_label']
+    .str.replace(r'[^\w\s&]', '', regex=True)
+    .str.strip()
+)
+
+plot_df = clusters_df.copy().reset_index()
+src_df = clusters_df.copy()
+```
+
+------------------------------------------------------------------------
+
+# Executive Summary {.unnumbered}
+
+The data reveals 3 findings that shape the investment thesis:
+
+```{python}
+#| echo: false
+
+# Three headline findings presented as a compact KPI strip
+kpi_df = pd.DataFrame({
+    'Finding': ['2 / 20', '49.6 pts', '0.0'],
+    'Headline': [
+        'markets qualify as Ready Markets (10% of the sample)',
+        'governance gap between Ready and Transition Markets',
+        'rank standard deviation for Malaysia & Chile across all four scenarios',
+    ],
+    'Implication': [
+        'Concentration, not diversification. Only Malaysia and Chile score high enough to justify investment today. A further 15 markets require structural improvements.',
+        'Governance is the primary gatekeeper. Markets below a minimum governance threshold are not investable regardless of energy demand or decarbonisation potential.',
+        'The result is robust across all investor profiles, from impact-first to risk-averse.',
+    ],
+    'Action': [
+        'Focus on Malaysia & Chile now',
+        'Screen for governance first',
+        'No-regret deployment, act immediately',
+    ],
+})
+
+(
+    kpi_df.style
+    .set_table_styles(TABLE_STYLES + [
+        {'selector': 'td:nth-child(1)',
+         'props': [('font-size', '28px'), ('font-weight', '800'),
+                   ('color', NAVY), ('white-space', 'nowrap'),
+                   ('border-left', f'4px solid {GOLD}'),
+                   ('padding-left', '16px'), ('width', '95px'),
+                   ('background-color', '#FAFAFA')]},
+        {'selector': 'td:nth-child(2)',
+         'props': [('font-weight', '600'), ('color', NAVY),
+                   ('font-size', '12.5px'), ('width', '35%')]},
+        {'selector': 'td:nth-child(3)',
+         'props': [('color', '#666666'), ('font-size', '13px'),
+                   ('font-style', 'italic'), ('width', '35%')]},
+        {'selector': 'td:nth-child(4)',
+         'props': [('font-weight', '700'), ('font-size', '12.5px'),
+                   ('color', GOLD2), ('white-space', 'nowrap')]},
+    ])
+    .hide(axis='index')
+)
+```
+
+::: {.callout-tip appearance="simple"}
+**Strategic implication**: Capital should concentrate in the strongest markets rather than being spread across marginal opportunities. For the 15 Transition Markets, the best approach is to monitor and wait, with clear conditions for re-entering when governance scores improve. The 3 Watch & Wait markets face fundamental barriers that make them non-viable on realistic timelines.
+:::
+
+------------------------------------------------------------------------
+
+# 1. Strategic Context
+
+## 1.1 The Investor's Dilemma
+
+Emerging markets present a paradox:
+
+-   **High growth, high risk:** Energy demand is rising 2 to 3 times faster than in developed markets, but regulatory uncertainty and weak governance can put projects at risk.
+-   **Difficult to compare markets:** Countries like Nigeria, Vietnam, and Brazil each have very different contexts, making side-by-side comparison challenging.
+
+This framework addresses that challenge by bringing 13 different indicators into one clear and transparent score.
+
+## 1.2 Analytical Scope
+
+This framework evaluates **20 emerging markets** across **3 regions** using **13 World Bank indicators** tested under **4 investor scenarios**.
+
+```{python}
+#| echo: false
+
+scope_df = pd.DataFrame({
+    'Region': ['Southeast Asia', 'Africa', 'Latin America'],
+    'N': [7, 8, 5],
+    'Countries': [
+        'Vietnam, Indonesia, Philippines, Thailand, Malaysia, Cambodia, Bangladesh',
+        "Kenya, Nigeria, Ghana, Ethiopia, Tanzania, Senegal, Côte d'Ivoire, Morocco",
+        'Brazil, Mexico, Colombia, Peru, Chile',
+    ],
+})
+
+(
+    scope_df.style
+    .set_table_styles(TABLE_STYLES)
+    .hide(axis='index')
+)
+```
+
+------------------------------------------------------------------------
+
+# 2. Methodology
+
+## 2.1 Framework Design and data source
+
+The framework assesses markets using four dimensions, each reflecting a different part of the investment case. In the baseline scenario, **Decarbonisation Opportunity** has the greatest weight because it best reflects the policy drivers that have the strongest impact on project returns. All 13 indicators come from the World Bank Open Data API and are retrieved automatically using the `wbgapi` Python library. This makes the analysis fully reproducible, since every data point comes from an official published source, and it also reduces the risk of manual entry errors.
+
+```{python}
+#| echo: false
+
+
+# Define dimension accent colors for styling
+dim_accent = {
+    'Market Opportunity':          '#1A6FA8',
+    'Decarbonisation':             NAVY,
+    'Business Environment':        '#1C6B45',
+    'Energy Security':             '#C8914D',
+}
+
+framework_complete = pd.DataFrame({
+    'Dimension': [
+        'Market Opportunity', 'Market Opportunity', 'Market Opportunity', 'Market Opportunity',
+        'Decarbonisation', 'Decarbonisation', 'Decarbonisation', 'Decarbonisation',
+        'Business Environment', 'Business Environment', 'Business Environment', 'Business Environment',
+        'Energy Security',
+    ],
+    'Indicator': [
+        'GDP per capita growth', 'Electricity consumption per capita',
+        'Population growth rate', 'Urban population share',
+        'Energy use per capita', 'Fossil electricity share',
+        'Modern renewable share (inverse)', 'Electricity access rate',
+        'Political stability', 'Regulatory quality',
+        'Rule of law', 'Control of corruption',
+        'Net energy imports',
+    ],
+    'World Bank Code': [
+        'NY.GDP.PCAP.KD.ZG', 'EG.USE.ELEC.KH.PC',
+        'SP.POP.GROW', 'SP.URB.TOTL.IN.ZS',
+        'EG.USE.PCAP.KG.OE', 'EG.ELC.FOSL.ZS',
+        'EG.ELC.RNWX.ZS', 'EG.ELC.ACCS.ZS',
+        'PV.EST', 'RQ.EST',
+        'RL.EST', 'CC.EST',
+        'EG.IMP.CONS.ZS',
+    ],
+    'Direction': [
+        'Higher → better', 'Higher → better',
+        'Higher → better', 'Higher → better',
+        'Higher → better', 'Higher → better',
+        'Lower → better', 'Higher → better',
+        'Higher → better', 'Higher → better',
+        'Higher → better', 'Higher → better',
+        'Higher → better',
+    ],
+    'Dim. Weight': [
+        '30%','30%','30%','30%',
+        '45%','45%','45%','45%',
+        '20%','20%','20%','20%',
+        '5%',
+    ],
+    'Ind. Weight': [
+        '30%','35%','20%','15%',
+        '35%','30%','25%','10%',
+        '30%','30%','25%','15%',
+        '100%',
+    ],
+    'Rationale': [
+        'Market expansion', 'Demand baseline',
+        'Long-run demand', 'Urban concentration',
+        'Carbon intensity proxy', 'Direct replacement opportunity',
+        'Low = growth runway', 'Infrastructure maturity',
+        'Execution risk', 'Policy predictability',
+        'Contract enforcement', 'Procurement integrity',
+        'Import dependency',
+    ],
+})
+
+(
+    framework_complete.style
+    .set_table_styles(TABLE_STYLES)
+    .apply(lambda col: [
+        f'border-left: 3px solid {dim_accent.get(v, "#ccc")}; '
+        f'font-weight: 600; color: {dim_accent.get(v, "#333")};'
+        for v in col
+    ], subset=['Dimension'])
+    .hide(axis='index')
+)
+```
+
+:::: column-margin
+::: {.callout-note appearance="simple"}
+Why Business Environment at only 20%?
+
+It is not under-weighted—it acts as a threshold constraint. Markets below a minimum governance standard cannot compensate with strong market size or decarbonisation scores. The 49.6-point governance gap between Ready and Transition Markets confirms this.
+:::
+::::
+
+:::: column-margin
+::: {.callout-note appearance="simple"}
+**Analysis period:** 2018–2023 (6-year rolling average per indicator)
+:::
+::::
+
+## 2.2 Processing Pipeline
+
+Raw World Bank data passes through 4 sequential steps before scoring. :::: column-margin ::: {.callout-note appearance="simple"} The pipeline ensures all indicators are on a common 0–100 scale before weighted aggregation, with missing values imputed regionally and outliers winsorised to prevent distortion. ::: ::::
+
+```{python}
+#| echo: false
+
+import plotly.graph_objects as go
+
+steps = ['① Raw Data', '② Imputation', '③ Winsorisation', '④ Normalisation']
+descriptions = [
+    '13 indicators<br>2018–2023<br>20 countries',
+    'Regional median<br>→ global fallback',
+    '5th / 95th percentile<br>capping',
+    'Min-max<br>0–100 scaling'
+]
+
+step_colors = [NAVY, GOLD2, '#1C6B45', '#1A6FA8']
+
+# Numeric x positions
+x_positions = [0, 1, 2, 3]
+
+fig = go.Figure()
+
+# Add circles for each step
+fig.add_trace(go.Scatter(
+    x=x_positions,
+    y=[1, 1, 1, 1],
+    mode='markers+text',
+    marker=dict(
+        size=[70, 70, 70, 70],
+        color=step_colors,
+        opacity=0.85,
+        line=dict(color='white', width=2)
+    ),
+    text=descriptions,
+    textposition='bottom center',
+    textfont=dict(size=11, color='#2C3E50'),
+    hoverinfo='text',
+    showlegend=False
+))
+
+# Add arrows using shapes (more reliable than annotations)
+for i in range(len(x_positions) - 1):
+    fig.add_shape(
+        type='line',
+        x0=x_positions[i] + 0.45,
+        y0=1,
+        x1=x_positions[i + 1] - 0.45,
+        y1=1,
+        line=dict(color='#888888', width=2),
+        xref='x',
+        yref='y'
+    )
+    # Add arrowhead using a triangle annotation
+    fig.add_annotation(
+        x=x_positions[i + 1] - 0.45,
+        y=1,
+        xref='x',
+        yref='y',
+        ax=x_positions[i + 1] - 0.65,
+        ay=1,
+        axref='x',
+        ayref='y',
+        arrowhead=2,
+        arrowsize=1.2,
+        arrowwidth=2,
+        arrowcolor='#888888',
+        showarrow=True
+    )
+
+fig.update_layout(
+    **LAYOUT,
+    height=300,
+    xaxis=dict(
+        showgrid=False,
+        zeroline=False,
+        showticklabels=True,
+        tickmode='array',
+        tickvals=x_positions,
+        ticktext=steps,
+        tickfont=dict(size=13, color=NAVY, weight='bold'),
+        range=[-0.8, 3.8]
+    ),
+    yaxis=dict(
+        showgrid=False,
+        zeroline=False,
+        showticklabels=False,
+        range=[0.2, 1.5]
+    ),
+    margin=dict(l=30, r=30, t=30, b=90),
+    #plot_bgcolor='white',
+)
+
+fig.show()
+```
+
+## 2.4 Scoring
+
+Scoring uses **hierarchical weighted aggregation** applied in two steps:
+
+**Within each dimension (step ⑤)**: The normalized indicators are combined into one dimension score using specific weights. For example, in **Market Opportunity**, electricity consumption has a higher weight (35%) than urbanization rate (15%).
+
+**Across dimensions (step ⑥):** The dimension scores are then combined using scenario-based weights to create a final attractiveness score from 0 to 100. Countries are ranked from 1 to 20, and the rankings are tested for consistency across all four investor scenarios.
+
+:::: column-margin
+::: {.callout-note appearance="simple"}
+**Reading the Sankey flow widths**
+
+The thickness of each flow shows how much it contributes to the final score.
+
+*Indicator → Dimension:* dimension weight × indicator weight × 100
+
+*Dimension → Total:* dimension weight × 100
+
+All flows into Total Score sum to 100.
+:::
+::::
+
+```{python}
+#| code-summary: "Show Sankey code"
+#| echo: false
+
+# Node layers: Indicators (0–12) → Dimensions (13–16) → Total Score (17)
+indicator_labels = [
+    'GDP Growth', 'Electricity Use', 'Population Growth', 'Urbanisation',     # 0-3: Market Opp
+    'Energy per Capita', 'Fossil Electricity Share', 'Modern Renewable Gap', 'Elec. Access',  # 4-7: Decarb
+    'Political Stability', 'Regulatory Quality', 'Rule of Law', 'Anti-Corruption',  # 8-11: Business Env
+    'Energy Imports',  # 12: Energy Security
+]
+dim_labels  = ['Market Opportunity', 'Decarbonisation', 'Business Environment', 'Energy Security']
+all_labels  = indicator_labels + dim_labels + ['Total Score']
+
+# Node index shortcuts
+IDX_MO, IDX_DC, IDX_BE, IDX_ES, IDX_TOT = 13, 14, 15, 16, 17
+
+# Dimension weights (scenario: Balanced)
+DIM_W = {'MO': 0.30, 'DC': 0.45, 'BE': 0.20, 'ES': 0.05}
+
+# Indicator weights within each dimension
+IND_W = {
+    0: 0.30, 1: 0.35, 2: 0.20, 3: 0.15,   # Market Opportunity (4 indicators)
+    4: 0.35, 5: 0.30, 6: 0.25, 7: 0.10,   # Decarbonisation (4 indicators)
+    8: 0.30, 9: 0.30, 10: 0.25, 11: 0.15, # Business Environment (4 indicators)
+    12: 1.00,                              # Energy Security (1 indicator)
+}
+IND_DIM = {
+    **{i: IDX_MO for i in range(4)},      # 0-3 → Market Opportunity
+    **{i: IDX_DC for i in range(4, 8)},   # 4-7 → Decarbonisation
+    **{i: IDX_BE for i in range(8, 12)},  # 8-11 → Business Environment
+    **{12: IDX_ES},                       # 12 → Energy Security
+}
+DIM_PARENT = {IDX_MO: 'MO', IDX_DC: 'DC', IDX_BE: 'BE', IDX_ES: 'ES'}
+
+# Build Sankey edges
+sources, targets, values = [], [], []
+for ind_idx, dim_idx in IND_DIM.items():
+    dw  = DIM_W[DIM_PARENT[dim_idx]]
+    val = round(dw * IND_W[ind_idx] * 100, 2)
+    sources.append(ind_idx);  targets.append(dim_idx);  values.append(val)
+for dim_idx, key in DIM_PARENT.items():
+    sources.append(dim_idx);  targets.append(IDX_TOT);  values.append(DIM_W[key] * 100)
+
+node_colors = (
+    ['rgba(26,111,168,0.55)'] * 4 +   # Market Opportunity indicators (0-3)
+    ['rgba(21,25,49,0.55)']   * 4 +   # Decarbonisation indicators (4-7)
+    ['rgba(28,107,69,0.55)']  * 4 +   # Business Environment indicators (8-11)
+    ['rgba(200,145,77,0.55)'] * 1 +   # Energy Security indicator (12)
+    ['#1A6FA8', NAVY, '#1C6B45', GOLD2, NAVY]  # Dimension + Total nodes
+)
+link_colors = (
+    ['rgba(26,111,168,0.18)']  * 4 +
+    ['rgba(21,25,49,0.18)']    * 4 +
+    ['rgba(28,107,69,0.18)']   * 4 +
+    ['rgba(200,145,77,0.18)']  * 1 +
+    ['rgba(26,111,168,0.30)', 'rgba(21,25,49,0.30)',
+     'rgba(28,107,69,0.30)', 'rgba(200,145,77,0.30)']
+)
+
+fig = go.Figure(go.Sankey(
+    arrangement='snap',
+    node=dict(
+        pad=18, thickness=18,
+        line=dict(color='white', width=0.5),
+        label=all_labels,
+        color=node_colors,
+        hovertemplate='<b>%{label}</b><extra></extra>',
+    ),
+    link=dict(
+        source=sources, target=targets, value=values,
+        color=link_colors,
+        hovertemplate='%{source.label} → %{target.label}'
+                      '<br>Weight contribution: %{value:.1f}%<extra></extra>',
+    ),
+))
+
+fig.update_layout(
+    **LAYOUT,
+    height=480,
+    margin=dict(l=10, r=10, t=65, b=20),
+)
+fig = chart_title_annotation(
+    fig,
+    'Scoring Architecture: Hierarchical Weighted Aggregation',
+    'Flow width represents proportional weight contribution to the total score (0–100)',
+)
+fig.show()
+```
+
+## 2.5 Investor Scenarios
+
+To check whether the rankings depend too much on the selected weights, we run the model again using four different investor approaches, each based on a different investment objective.
+
+```{python}
+#| echo: false
+#| label: tbl-scenarios
+
+scenarios_meta = pd.DataFrame({
+    'Scenario': ['Balanced', 'Impact-First', 'Growth-Focused', 'Risk-Averse'],
+    'Capital Mandate': [
+        'Neutral reference',
+        'Development finance institutions and climate-impact funds',
+        'Commercial infrastructure funds and utilities',
+        'Pension funds and insurance-backed capital',
+    ],
+    'Dominant Dimension': [
+        'Decarbonisation (45%)',
+        'Decarbonisation (60%)',
+        'Market Opportunity (55%)',
+        'Business Environment (40%)',
+    ],
+    'Key Question': [
+        'Which markets score well overall?',
+        'Where is fossil-fuel replacement most urgent?',
+        'Where is energy demand growing fastest?',
+        'Where is project execution safest?',
+    ],
+})
+
+dom_colors = {
+    'Decarbonisation (45%)':      f'background-color: {NAVY}18; color: {NAVY}; font-weight: 600',
+    'Decarbonisation (60%)':      f'background-color: {NAVY}28; color: {NAVY}; font-weight: 700',
+    'Market Opportunity (55%)':   'background-color: #1A6FA818; color: #1A6FA8; font-weight: 700',
+    'Business Environment (40%)': 'background-color: #1C6B4518; color: #1C6B45; font-weight: 700',
+}
+
+(
+    scenarios_meta.style
+    .set_table_styles(TABLE_STYLES)
+    .map(lambda v: dom_colors.get(v, ''), subset=['Dominant Dimension'])
+    .hide(axis='index')
+)
+```
+
+```{python}
+#| code-summary: "Show chart code"
+#| echo: false
+
+scenarios = {
+    'Balanced':       [30, 45, 20, 5],
+    'Impact-First':   [20, 60, 15, 5],
+    'Growth-Focused': [55, 25, 15, 5],
+    'Risk-Averse':    [25, 30, 40, 5],
+}
+dimensions = ['Market Opportunity', 'Decarbonisation', 'Business Environment', 'Energy Security']
+sc_colors  = ['#1A6FA8', '#1C6B45', GOLD2, NAVY]
+
+fig = go.Figure()
+for (sc_name, weights), color in zip(scenarios.items(), sc_colors):
+    fig.add_trace(go.Bar(
+        name=sc_name,
+        x=dimensions,
+        y=weights,
+        marker=dict(color=color, opacity=0.88),
+        text=[f'{w}%' for w in weights],
+        textposition='outside',
+        textfont=dict(size=11, color='#444444'),
+        hovertemplate=f'<b>{sc_name}</b><br>%{{x}}: %{{y}}%<extra></extra>',
+    ))
+
+fig.update_layout(
+    **LAYOUT,
+    barmode='group',
+    height=380,
+    margin=dict(l=40, r=20, t=75, b=50),
+    xaxis=dict(tickfont=dict(size=12), showgrid=False),
+    yaxis=dict(
+        title='Weight (%)', range=[0, 75],
+        showgrid=True, gridcolor='#EBEBEB',
+        ticksuffix='%', tickfont=dict(size=11),
+    ),
+    legend=dict(
+        orientation='h', y=-0.18, x=0.5, xanchor='center',
+        font=dict(size=11), bgcolor='white',
+        bordercolor='#DDDDDD', borderwidth=1,
+    ),
+    shapes=[dict(
+        type='line', x0=-0.5, x1=3.5, y0=0, y1=0,
+        line=dict(color='#CCCCCC', width=1),
+    )],
+)
+fig = chart_title_annotation(
+    fig,
+    'Four Investor Scenarios — Weight Allocation by Dimension',
+    'Each scenario reflects a distinct capital mandate; Energy Security is fixed at 5% across all scenarios',
+)
+fig.show()
+```
+
+:::: column-margin
+::: {.callout-note appearance="simple"}
+Energy Security is fixed at 5% across all scenarios, a deliberate design choice. Although import dependence and supply chain risk matter, they usually do not outweigh the main investment drivers. For this analysis, Energy Security uses a single indicator (net energy imports) due to data availability constraints.
+:::
+::::
+
+## 2.6 Market Segmentation
+
+Markets are segmented into three archetypes using a hybrid approach that combines the statistical rigor of K-Means clustering with the business clarity of score-based thresholds.
+
+```{python}
+#| echo: false
+
+import plotly.graph_objects as go
+
+steps = ['① K-Means', '② Thresholds', '③ Archetypes']
+descriptions = [
+    'k=3 clusters<br>Silhouette: 0.349<br>Good separation',
+    'Ready: ≥70<br>Transition: 40–70<br>Watch & Wait: <40',
+    '2 Ready Markets<br>15 Transition<br>3 Watch & Wait'
+]
+
+step_colors = [NAVY, GOLD2, '#1C6B45']
+
+# Numeric x positions
+x_positions = [0, 1, 2]
+
+fig = go.Figure()
+
+# Add circles for each step
+fig.add_trace(go.Scatter(
+    x=x_positions,
+    y=[1, 1, 1],
+    mode='markers+text',
+    marker=dict(
+        size=[70, 70, 70],
+        color=step_colors,
+        opacity=0.85,
+        line=dict(color='white', width=2)
+    ),
+    text=descriptions,
+    textposition='bottom center',
+    textfont=dict(size=11, color='#2C3E50'),
+    hoverinfo='text',
+    showlegend=False
+))
+
+# Add arrows between steps
+for i in range(len(x_positions) - 1):
+    # Line between circles
+    fig.add_shape(
+        type='line',
+        x0=x_positions[i] + 0.45,
+        y0=1,
+        x1=x_positions[i + 1] - 0.45,
+        y1=1,
+        line=dict(color='#888888', width=2),
+        xref='x',
+        yref='y'
+    )
+    # Arrowhead
+    fig.add_annotation(
+        x=x_positions[i + 1] - 0.45,
+        y=1,
+        xref='x',
+        yref='y',
+        ax=x_positions[i + 1] - 0.65,
+        ay=1,
+        axref='x',
+        ayref='y',
+        arrowhead=2,
+        arrowsize=1.2,
+        arrowwidth=2,
+        arrowcolor='#888888',
+        showarrow=True
+    )
+
+fig.update_layout(
+    **LAYOUT,
+    height=300,
+    xaxis=dict(
+        showgrid=False,
+        zeroline=False,
+        showticklabels=True,
+        tickmode='array',
+        tickvals=x_positions,
+        ticktext=steps,
+        tickfont=dict(size=13, color=NAVY, weight='bold'),
+        range=[-0.8, 2.8]
+    ),
+    yaxis=dict(
+        showgrid=False,
+        zeroline=False,
+        showticklabels=False,
+        range=[0.2, 1.5]
+    ),
+    margin=dict(l=30, r=30, t=30, b=90),
+    #plot_bgcolor='white',
+)
+
+fig.show()
+```
+
+:::: column-margin
+::: {.callout-note appearance="simple"}
+Why threshold-based over K-Means labels?
+
+K-Means groups by similarity in dimension scores, which can produce counterintuitive clusters (e.g., Senegal and Bangladesh grouped together due to high energy security scores). Threshold-based labeling ensures that all markets above a certain score are consistently classified as "Ready," regardless of their dimension profile. The two methods are complementary: K-Means validates the structure; thresholds ensure business clarity.
+:::
+::::
+
+```{python}
+#| code-summary: "Show clustering function"
+#| eval: false
+
+def run_clustering(scores_df, n_clusters=3):
+    """Segment markets into investment archetypes via K-Means."""
+    dim_cols = [c for c in scores_df if c.startswith('score_') and 'total' not in c]
+    features_scaled = StandardScaler().fit_transform(scores_df[dim_cols].fillna(50))
+    km = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    scores_df['cluster_id'] = km.fit_predict(features_scaled)
+    order  = scores_df.groupby('cluster_id')['total_score'].mean().sort_values(ascending=False)
+    labels = ['Ready Markets', 'Transition Markets', 'Watch & Wait']
+    scores_df['cluster_label'] = scores_df['cluster_id'].map(dict(zip(order.index, labels)))
+    return scores_df
+```
+
+------------------------------------------------------------------------
+
+# 3. Results
+
+## 3.1 Market Rankings
+
+```{python}
+#| code-summary: "Show chart code"
+#| echo: false 
+
+sorted_df = plot_df.sort_values('total_score', ascending=True).reset_index(drop=True)
+# Best market (Malaysia) now at the top — rank 1 reads top-to-bottom
+
+fig = go.Figure()
+
+# Cluster background bands
+band_colors = {
+    'Ready Markets':      'rgba(28,107,69,0.06)',
+    'Transition Markets': 'rgba(200,145,77,0.06)',
+    'Watch & Wait':       'rgba(176,58,46,0.06)',
+}
+for cluster_lbl, band_color in band_colors.items():
+    rows = sorted_df[sorted_df['cluster_label'] == cluster_lbl].index
+    if len(rows) == 0:
+        continue
+    fig.add_shape(
+        type='rect', xref='paper', yref='y',
+        x0=0, x1=1, y0=rows.min() - 0.5, y1=rows.max() + 0.5,
+        fillcolor=band_color, line=dict(width=0), layer='below',
+    )
+
+# Bars
+for cluster_lbl, color in CLUSTER_COLORS.items():
+    mask = sorted_df['cluster_label'] == cluster_lbl
+    sub  = sorted_df[mask]
+    if sub.empty:
+        continue
+    fig.add_trace(go.Bar(
+        x=sub['total_score'],
+        y=sub['country_name'],
+        orientation='h',
+        name=cluster_lbl,
+        marker=dict(color=color, opacity=0.88),
+        text=[f"{v:.1f}" for v in sub['total_score']],
+        textposition='outside',
+        textfont=dict(size=10.5, color='#444444'),
+        hovertemplate=(
+            '<b>%{y}</b><br>'
+            'Score: %{x:.1f}<br>'
+            'Rank: #%{customdata[0]}<br>'
+            'Archetype: %{customdata[1]}'
+            '<extra></extra>'
+        ),
+        customdata=list(zip(sub['rank'], sub['cluster_label'])),
+    ))
+
+# ── Gap bracket — right side of chart, between Chile (index 1) and Thailand (index 2)
+chile_score    = sorted_df.loc[sorted_df['country_name'] == 'Chile',    'total_score'].values[0]
+thailand_score = sorted_df.loc[sorted_df['country_name'] == 'Thailand', 'total_score'].values[0]
+chile_y        = sorted_df[sorted_df['country_name'] == 'Chile'].index[0]
+thailand_y     = sorted_df[sorted_df['country_name'] == 'Thailand'].index[0]
+bracket_x      = 90   # fixed x position to the right of all bars
+
+# Vertical bracket line
+fig.add_shape(
+    type='line', xref='x', yref='y',
+    x0=bracket_x, x1=bracket_x,
+    y0=chile_y, y1=thailand_y,
+    line=dict(color=CLUSTER_COLORS['Ready Markets'], width=1.5),
+)
+# Top tick
+fig.add_shape(
+    type='line', xref='x', yref='y',
+    x0=bracket_x - 1, x1=bracket_x + 1,
+    y0=chile_y, y1=chile_y,
+    line=dict(color=CLUSTER_COLORS['Ready Markets'], width=1.5),
+)
+# Bottom tick
+fig.add_shape(
+    type='line', xref='x', yref='y',
+    x0=bracket_x - 1, x1=bracket_x + 1,
+    y0=thailand_y, y1=thailand_y,
+    line=dict(color=CLUSTER_COLORS['Ready Markets'], width=1.5),
+)
+# Label
+fig.add_annotation(
+    x=bracket_x + 0.5,
+    y=(chile_y + thailand_y) / 2,
+    text=f'<b>~{chile_score - thailand_score:.0f} pt gap</b>',
+    showarrow=False, xanchor='left',
+    font=dict(size=10, color=CLUSTER_COLORS['Ready Markets'],
+              family='Arial, sans-serif'),
+)
+tier_positions = {}
+for tier in ['Ready Markets', 'Transition Markets', 'Watch & Wait']:
+    tier_indices = sorted_df[sorted_df['cluster_label'] == tier].index.tolist()
+    if len(tier_indices) > 0:
+        y_pos = np.mean(tier_indices)
+        tier_positions[tier] = (y_pos, 94)
+
+for tier, (y_pos, x_pos) in tier_positions.items():
+    fig.add_annotation(
+        x=x_pos,
+        y=y_pos,
+        text=tier,
+        showarrow=False,
+        xanchor='left',
+        font=dict(size=9, color=CLUSTER_COLORS[tier], 
+                  family='Arial, sans-serif', weight='bold'),
+        bgcolor='rgba(255,255,255,0.85)',
+        borderpad=2,
+    )
+
+fig.update_layout(
+    **LAYOUT,
+    barmode='overlay',
+    height=600,
+    margin=dict(l=120, r=110, t=75, b=50),
+    xaxis=dict(
+        range=[0, 100],
+        title='Investment Attractiveness Score (0–100)',
+        showgrid=True, gridcolor='#EBEBEB',
+        tickfont=dict(size=11), zeroline=False,
+    ),
+    yaxis=dict(tickfont=dict(size=11.5),categoryorder='array',
+        categoryarray=sorted_df['country_name'].tolist()),
+    legend=dict(
+        orientation='h', y=-0.1, x=0.5, xanchor='center',
+        font=dict(size=11), bgcolor='white',
+        bordercolor='#DDDDDD', borderwidth=1,
+    ),
+)
+fig = chart_title_annotation(
+    fig,
+    'Investment Attractiveness Rankings: All 20 Markets',
+    'Balanced scenario: Which markets score well overall?' ,
+)
+fig.show()
+```
+
+::: {.callout-note appearance="simple"}
+Score gap: Malaysia (86.6) and Chile (70.3) are separated from the third-ranked market (Thailand, 60.6) by nearly 10 points. This gap, combined with the governance differential, constitutes a qualitatively different investment category. The next tier clusters between 41–60, while below 40, structural barriers dominate.
+:::
+
+### Top-10 Market Summary
+
+##### Scores and Archetype Classification
+
+```{python}
+#| code-summary: "Show table code"
+#| echo: false 
+
+top10 = plot_df.sort_values('rank').head(10)[[
+    'rank', 'country_name', 'region', 'total_score',
+    'score_market_opportunity', 'score_decarbonization_opportunity',
+    'score_business_environment', 'score_energy_security', 'cluster_label',
+]].copy()
+
+top10.columns = [
+    'Rank', 'Country', 'Region', 'Total',
+    'Market Opp.', 'Decarbonisation', 'Business Env.', 'Energy Sec.', 'Archetype',
+]
+
+num_cols = ['Total', 'Market Opp.', 'Decarbonisation', 'Business Env.', 'Energy Sec.']
+for c in num_cols:
+    top10[c] = pd.to_numeric(top10[c], errors='coerce').round(1)
+
+(
+    top10.style
+    .set_table_styles(TABLE_STYLES)
+    .map(score_bg, subset=['Market Opp.', 'Decarbonisation', 'Business Env.', 'Energy Sec.'])
+    .bar(subset=['Total'], color=NAVY, vmin=0, vmax=100, props='width: 80px')
+    .format({c: '{:.1f}' for c in num_cols}, na_rep='—')
+    .hide(axis='index')
+)
+```
+
+## 3.2 Dimensional Performance
+
+```{python}
+#| code-summary: "Show chart code"
+#| echo: false 
+
+dm_df = plot_df.sort_values('total_score', ascending=False).reset_index(drop=True)
+
+dim_cols   = [
+    'score_market_opportunity', 'score_decarbonization_opportunity',
+    'score_business_environment', 'score_energy_security',
+]
+dim_labels = ['Market Opportunity', 'Decarbonisation', 'Business Env.', 'Energy Security']
+
+# Per-dimension colourscales using rgba for mid-stop
+colorscale_map = {
+    'score_market_opportunity':
+        [[0, '#F0EBE3'], [0.5, 'rgba(26,111,168,0.5)'], [1, '#1A6FA8']],
+    'score_decarbonization_opportunity':
+        [[0, '#F0EBE3'], [0.5, 'rgba(21,25,49,0.5)'],   [1, NAVY]],
+    'score_business_environment':
+        [[0, '#F0EBE3'], [0.5, 'rgba(28,107,69,0.5)'],  [1, '#1C6B45']],
+    'score_energy_security':
+        [[0, '#F0EBE3'], [0.5, 'rgba(200,145,77,0.5)'], [1, GOLD2]],
+}
+
+fig = make_subplots(
+    rows=1, cols=4,
+    shared_yaxes=True,
+    column_titles=dim_labels,
+    horizontal_spacing=0.03,
+)
+
+for col_idx, dim in enumerate(dim_cols, 1):
+    fig.add_trace(go.Scatter(
+        x=dm_df[dim],
+        y=dm_df['country_name'],
+        mode='markers',
+        marker=dict(
+            size=dm_df[dim] / 8 + 5,
+            color=dm_df[dim],
+            colorscale=colorscale_map[dim],
+            cmin=0, cmax=100,
+            showscale=False,
+            line=dict(width=0.8, color='white'),
+        ),
+        text=dm_df['country_name'],
+        customdata=dm_df[dim].round(1),
+        hovertemplate='<b>%{text}</b><br>Score: %{customdata}<extra></extra>',
+        showlegend=False,
+    ), row=1, col=col_idx)
+
+    # Score = 50 reference line per panel
+    fig.add_shape(
+        type='line', xref=f'x{col_idx}', yref='paper',
+        x0=50, x1=50, y0=0, y1=1,
+        line=dict(color='#DDDDDD', width=1, dash='dot'),
+    )
+
+# Cluster separator lines (horizontal)
+watch_n      = (dm_df['cluster_label'] == 'Watch & Wait').sum()
+transition_n = (dm_df['cluster_label'] == 'Transition Markets').sum()
+for boundary in [watch_n - 0.5, watch_n + transition_n - 0.5]:
+    fig.add_hline(y=boundary, line=dict(color='#CCCCCC', width=1, dash='dot'))
+
+fig.update_layout(
+    **LAYOUT,
+    height=580,
+    margin=dict(l=110, r=40, t=80, b=20),
+)
+fig.update_xaxes(
+    range=[0, 105], showgrid=False,
+    tickvals=[0, 50, 100], tickfont=dict(size=10),
+)
+fig.update_yaxes(
+    tickfont=dict(size=10.5),
+    showgrid=True, gridcolor='#F0F0F0', gridwidth=1,
+)
+fig.update_annotations(font=dict(size=11, color=NAVY))
+fig = chart_title_annotation(
+    fig,
+    'Dimensional Performance: All 20 Markets',
+    'Dot size and colour intensity encode score magnitude · Dashed line marks score = 50 · Sorted by total score',
+)
+fig.show()
+```
+
+::: {.callout-note appearance="simple"}
+Three patterns that stand out:
+
+-   **Malaysia** is the only market with no dimension score below 62, genuinely balanced across all four dimensions.
+-   **Chile** compensates for moderate market opportunity with near-perfect governance (99.99) and strong energy security (98.8).
+-   **Kenya, Ethiopia,** and **Nigeria** illustrate the governance trap: business environment scores below 35 overwhelm every other dimension, making market size and decarbonisation potential irrelevant.
+:::
+
+## 3.3 Score Decomposition: Top Two Markets
+
+##### Each segment shows the weighted contribution of one dimension to the total score
+
+```{python}
+#| code-summary: "Show chart code"
+#| echo: false
+
+DIM_KEYS    = [
+    'score_market_opportunity', 'score_decarbonization_opportunity',
+    'score_business_environment', 'score_energy_security',
+]
+DIM_NAMES   = ['Market Opportunity', 'Decarbonisation', 'Business Env.', 'Energy Security']
+DIM_WEIGHTS = [0.30, 0.45, 0.20, 0.05]
+DIM_COLORS_ = ['#1A6FA8', NAVY, '#1C6B45', GOLD2]
+
+countries = {'Malaysia': 'MYS', 'Chile': 'CHL'}
+
+fig = make_subplots(
+    rows=2, cols=1,
+    shared_xaxes=True,
+    vertical_spacing=0.12,
+)
+
+for row_idx, (country_name, code) in enumerate(countries.items(), 1):
+    row    = src_df.loc[code]
+    contrs = [row[k] * w for k, w in zip(DIM_KEYS, DIM_WEIGHTS)]
+    total  = sum(contrs)
+
+    for dim_name, contrib, color in zip(DIM_NAMES, contrs, DIM_COLORS_):
+        fig.add_trace(go.Bar(
+            name=dim_name,
+            x=[contrib],
+            y=[country_name],
+            orientation='h',
+            marker=dict(color=color, opacity=0.88),
+            text=f'{contrib:.1f}',
+            textposition='inside',
+            textfont=dict(size=10.5, color='white'),
+            hovertemplate=f'<b>{dim_name}</b><br>Contribution: %{{x:.1f}}<extra></extra>',
+            showlegend=(row_idx == 1),
+            legendgroup=dim_name,
+        ), row=row_idx, col=1)
+
+    # Total score annotation at the right edge of each bar
+    fig.add_annotation(
+        xref=f'x{row_idx}' if row_idx > 1 else 'x',
+        yref=f'y{row_idx}' if row_idx > 1 else 'y',
+        x=total + 1.5, y=country_name,
+        text=f'<b>{total:.1f}</b>',
+        showarrow=False, xanchor='left',
+        font=dict(size=13, color=NAVY, family='Arial, sans-serif'),
+    )
+
+fig.update_layout(
+    **LAYOUT,
+    barmode='stack',
+    height=300,
+    margin=dict(l=90, r=80, t=80, b=70),
+    legend=dict(
+        orientation='h', y=-0.22, x=0.5, xanchor='center',
+        font=dict(size=11), bgcolor='white',
+        bordercolor='#DDDDDD', borderwidth=1,
+        traceorder='normal',
+    ),
+)
+fig.update_xaxes(range=[0, 100], showgrid=True, gridcolor='#EBEBEB', tickfont=dict(size=10))
+fig.update_yaxes(showgrid=False, tickfont=dict(size=12))
+fig = chart_title_annotation(
+    fig,
+    'Score Decomposition: What drives the top 2 rankings?',
+)
+fig.show()
+```
+
+------------------------------------------------------------------------
+
+# 4. Sensitivity Analysis
+
+The key question for any scoring exercise is whether results reflect genuine market quality or are an artefact of the chosen weights. We answer this by re-running the full model under four investor profiles and comparing each market's rank across scenarios. Markets with zero rank variance are high-confidence selections regardless of the specific strategy used.
+
+##### Rank Stability: All 20 Markets Across All Four Scenarios
+
+```{python}
+#| code-summary: "Show table code"
+#| echo: false
+
+# Create rank_stability column if it doesn't exist
+if 'rank_stability' not in sensitivity_df.columns:
+    sensitivity_df['rank_stability'] = sensitivity_df['rank_std'].apply(
+        lambda x: 'Very High' if x <= 1.0
+                  else ('High'   if x <= 2.0
+                  else ('Medium' if x <= 3.0 else 'Low'))
+    )
+
+# Prepare stability table
+stab = (
+    sensitivity_df
+    .sort_values('avg_rank')
+    [['country_name', 'region', 'avg_rank', 'rank_std',
+      'rank_min', 'rank_max', 'rank_stability']]
+    .copy()
+)
+
+stab = stab.rename(columns={
+    'country_name':   'Country',
+    'region':         'Region',
+    'avg_rank':       'Avg. Rank',
+    'rank_std':       'Std. Dev.',
+    'rank_min':       'Best Rank',
+    'rank_max':       'Worst Rank',
+    'rank_stability': 'Stability',
+}).round({'Avg. Rank': 1, 'Std. Dev.': 1})
+
+def color_stability(val):
+    return {
+        'Very High': 'background-color: #D4EDDA; color: #0D4028; font-weight: 700',
+        'High':      'background-color: #FFF3CD; color: #5A3D00; font-weight: 700',
+        'Medium':    'background-color: #FDECEA; color: #7A1F1F; font-weight: 700',
+        'Low':       'background-color: #F5C6CB; color: #4A0010; font-weight: 700',
+    }.get(val, '')
+
+(
+    stab.style
+    .set_table_styles(TABLE_STYLES)
+    .map(color_stability, subset=['Stability'])
+    .bar(subset=['Std. Dev.'], color='#E8ECF0', vmin=0, vmax=4)
+    .format({'Avg. Rank': '{:.1f}', 'Std. Dev.': '{:.1f}'}, na_rep='—')
+    .hide(axis='index')
+)
+```
+
+::: {.callout-tip appearance="simple"}
+**The stability insight:** Malaysia and Chile hold rank #1 and #2 in every scenario with a standard deviation of zero. Peru also demonstrates perfect stability (rank #11 in all scenarios). Brazil is the most volatile market (std=3.1, Medium stability), reflecting its balanced but sensitive profile across dimensions.
+:::
+
+------------------------------------------------------------------------
+
+# 5. Market Archetypes
+
+## 5.1 Cluster Profiles
+
+```{python}
+#| code-summary: "Show PCA chart code"
+#| echo: false 
+
+from scipy.spatial import ConvexHull
+
+dim_cols        = [
+    'score_market_opportunity', 'score_decarbonization_opportunity',
+    'score_business_environment', 'score_energy_security',
+]
+features        = src_df[dim_cols].fillna(50)
+features_scaled = StandardScaler().fit_transform(features)
+pca             = PCA(n_components=2, random_state=42).fit(features_scaled)
+coords          = pca.transform(features_scaled)
+var             = pca.explained_variance_ratio_
+
+pca_df        = src_df.copy()
+pca_df['pc1'] = coords[:, 0]
+pca_df['pc2'] = coords[:, 1]
+
+fig = go.Figure()
+
+# Convex hull shading — one per cluster
+for cluster_lbl, color in CLUSTER_COLORS.items():
+    mask = pca_df['cluster_label'] == cluster_lbl
+    pts  = pca_df[mask][['pc1', 'pc2']].values
+    if len(pts) < 3:
+        continue
+    hull   = ConvexHull(pts)
+    hull_x = list(pts[hull.vertices, 0]) + [pts[hull.vertices[0], 0]]
+    hull_y = list(pts[hull.vertices, 1]) + [pts[hull.vertices[0], 1]]
+    # Expand hull slightly for padding
+    cx = np.mean(hull_x[:-1]);  cy = np.mean(hull_y[:-1])
+    hull_x = [cx + 1.18 * (x - cx) for x in hull_x]
+    hull_y = [cy + 1.18 * (y - cy) for y in hull_y]
+    r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+    fig.add_trace(go.Scatter(
+        x=hull_x, y=hull_y,
+        fill='toself',
+        fillcolor=f'rgba({r},{g},{b},0.08)',
+        line=dict(color=color, width=1.2, dash='dot'),
+        mode='lines', showlegend=False, hoverinfo='skip',
+    ))
+
+# Scatter points
+for cluster_lbl, color in CLUSTER_COLORS.items():
+    mask = pca_df['cluster_label'] == cluster_lbl
+    if not mask.any():
+        continue
+    sub = pca_df[mask]
+    fig.add_trace(go.Scatter(
+        x=sub['pc1'], y=sub['pc2'],
+        mode='markers+text', name=cluster_lbl,
+        text=sub['country_name'], textposition='top center',
+        textfont=dict(size=8.5, color='#2C3E50'),
+        marker=dict(
+            size=sub['total_score'] / 5.5 + 7,
+            color=color, opacity=0.85,
+            line=dict(width=1.5, color='white'),
+        ),
+        hovertemplate='<b>%{text}</b><br>Score: %{customdata:.1f}<extra></extra>',
+        customdata=sub['total_score'],
+    ))
+
+fig.update_layout(
+    **LAYOUT,
+    height=480,
+    margin=dict(l=55, r=55, t=85, b=80),
+    xaxis=dict(
+        title=f'PC1 — {var[0]:.0%} variance explained',
+        showgrid=True, gridcolor='#EBEBEB', zeroline=False, tickfont=dict(size=10),
+    ),
+    yaxis=dict(
+        title=f'PC2 — {var[1]:.0%} variance explained',
+        showgrid=True, gridcolor='#EBEBEB', zeroline=False, tickfont=dict(size=10),
+    ),
+    legend=dict(
+        orientation='h', y=-0.18, x=0.5, xanchor='center',
+        font=dict(size=11), bgcolor='white',
+        bordercolor='#DDDDDD', borderwidth=1,
+    ),
+)
+fig = chart_title_annotation(
+    fig,
+    'Market Segmentation: Principal Component Analysis',
+    'Bubble size proportional to total score · Shaded regions show cluster boundaries',
+)
+fig.show()
+```
+
+```{python}
+#| code-summary: "Show radar chart code"
+#| echo: false 
+
+# Compute average dimension scores per cluster
+arch_df = src_df.groupby('cluster_label').agg(
+    Market_Opp     =('score_market_opportunity',          'mean'),
+    Decarbonisation=('score_decarbonization_opportunity', 'mean'),
+    Business_Env   =('score_business_environment',        'mean'),
+    Energy_Sec     =('score_energy_security',             'mean'),
+    Avg_Score      =('total_score',                       'mean'),
+    n              =('total_score',                       'count'),
+).round(1)
+
+arch_order  = ['Ready Markets', 'Transition Markets', 'Watch & Wait']
+dim_radar   = ['Market_Opp', 'Decarbonisation', 'Business_Env', 'Energy_Sec']
+dim_display = ['Market\nOpportunity', 'Decarbonisation', 'Business\nEnvironment', 'Energy\nSecurity']
+
+fig = go.Figure()
+for cluster_lbl, color in CLUSTER_COLORS.items():
+    if cluster_lbl not in arch_df.index:
+        continue
+    vals        = [arch_df.loc[cluster_lbl, d] for d in dim_radar]
+    vals_closed = vals + [vals[0]]
+    dims_closed = dim_display + [dim_display[0]]
+    r, g, b     = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+    fig.add_trace(go.Scatterpolar(
+        r=vals_closed,
+        theta=dims_closed,
+        fill='toself',
+        name=f"{cluster_lbl} (n={int(arch_df.loc[cluster_lbl, 'n'])})",
+        line=dict(color=color, width=2),
+        fillcolor=f'rgba({r},{g},{b},0.12)',
+        hovertemplate=f'<b>{cluster_lbl}</b><br>%{{theta}}: %{{r:.1f}}<extra></extra>',
+    ))
+
+fig.update_layout(
+    **LAYOUT,
+    height=420,
+    margin=dict(l=60, r=60, t=85, b=60),
+    polar=dict(
+        bgcolor='#FAFAFA',
+        radialaxis=dict(
+            visible=True, range=[0, 100],
+            tickvals=[25, 50, 75, 100],
+            tickfont=dict(size=9, color='#999999'),
+            gridcolor='#DDDDDD', gridwidth=1,
+            linecolor='#DDDDDD',
+        ),
+        angularaxis=dict(
+            tickfont=dict(size=11, color=NAVY),
+            linecolor='#DDDDDD', gridcolor='#DDDDDD',
+        ),
+    ),
+    legend=dict(
+        orientation='h', y=-0.12, x=0.5, xanchor='center',
+        font=dict(size=11), bgcolor='white',
+        bordercolor='#DDDDDD', borderwidth=1,
+    ),
+)
+fig = chart_title_annotation(
+    fig,
+    'Archetype Dimension Profiles',
+    'Average dimension score per cluster (0–100) · Larger area = stronger overall profile',
+)
+fig.show()
+```
+
+## 5.2 Archetype Definitions
+
+```{python}
+#| code-summary: "Show table code"
+#| echo: false
+
+archetype_ref = pd.DataFrame({
+    'Archetype':  ['Ready Markets', 'Transition Markets', 'Watch & Wait'],
+    'N':          [2, 15, 3],
+    'Avg. Score': [78.4, 49.3, 28.4],
+    'Score Range': ['70.3–86.6', '41.2–60.6', '23.9–30.7'],
+    'Markets': [
+        'Malaysia, Chile',
+        'Thailand, Vietnam, Mexico, Indonesia, Ghana, Senegal, Côte d\'Ivoire, '
+        'Bangladesh, Peru, Morocco, Colombia, Philippines, Brazil, Cambodia, Tanzania',
+        'Nigeria, Ethiopia, Kenya',
+    ],
+    'Profile': [
+        'Strong across all dimensions. Governance scores above 98 place these markets '
+        'in a category of their own (no structural barriers to entry). '
+        'Decarbonisation scores reflect strong replacement opportunity.',
+        'Strong demand signals and meaningful decarbonisation opportunity. '
+        'Governance gaps (avg 49.9) or energy security constraints require '
+        'mitigation before entry. Most markets have clear pathways to improvement.',
+        'Structural barriers (governance deficits avg 15.7, sub-critical market size, '
+        'or infrastructure gaps) prevent near-term viability. '
+        'Fundamental reform required before investment consideration.',
+    ],
+})
+
+arch_row_colors = {
+    'Ready Markets':      'background-color: #D4EDDA; color: #0D4028; font-weight: 700',
+    'Transition Markets': 'background-color: #FFF3CD; color: #5A3D00; font-weight: 700',
+    'Watch & Wait':       'background-color: #FDECEA; color: #7A1F1F; font-weight: 700',
+}
+
+(
+    archetype_ref.style
+    .set_table_styles(TABLE_STYLES + [
+        # Set explicit column widths
+        {'selector': 'th:nth-child(1), td:nth-child(1)', 'props': [('width', '15%')]},  # Archetype
+        {'selector': 'th:nth-child(2), td:nth-child(2)', 'props': [('width', '5%')]},   # N
+        {'selector': 'th:nth-child(3), td:nth-child(3)', 'props': [('width', '8%')]},   # Avg. Score
+        {'selector': 'th:nth-child(4), td:nth-child(4)', 'props': [('width', '10%'), ('white-space', 'nowrap')]},  # Score Range
+        {'selector': 'th:nth-child(5), td:nth-child(5)', 'props': [('width', '32%')]},  # Markets
+        {'selector': 'th:nth-child(6), td:nth-child(6)', 'props': [('width', '30%')]},  # Profile
+    ])
+    .map(lambda v: arch_row_colors.get(v, ''), subset=['Archetype'])
+    .map(score_bg, subset=['Avg. Score'])
+    .set_properties(subset=['Profile'], **{'font-size': '11.5px', 'line-height': '1.5'})
+    .set_properties(subset=['Markets'], **{'font-size': '11px', 'color': '#555555'})
+    .set_properties(subset=['Score Range'], **{'font-size': '12px', 'font-weight': '500', 'white-space': 'nowrap'})
+    .format({'Avg. Score': '{:.1f}'})
+    .hide(axis='index')
+)
+```
+
+------------------------------------------------------------------------
+
+# 6. Scope and Limitations
+
+::: callout-warning
+## This Framework Does Not Replace Project-Level Due Diligence
+
+This is a **macro-level market screen**, the first filter in a multi-phase process. It identifies which markets are worth investigating further. It does not replace:
+
+-   **Technical assessment:** Solar irradiance and wind capacity data, grid interconnection studies, site suitability, land tenure analysis...
+-   **Financial modelling:** Project-level NPV/IRR, power purchase agreement structure, tariff analysis, FX risk, hedging cost...
+-   **Local intelligence:** Regulatory nuance, permitting timelines, community dynamics, partnership landscape, competitive entry barriers...
+
+For **Ready Markets**, the next step is to carry out a detailed technical and regulatory review focused on specific project locations.
+:::
+
+------------------------------------------------------------------------
+
+# 7. Appendix
+
+## 7.1 Complete Results
+
+```{python}
+#| echo: false
+
+full = plot_df.sort_values('rank')[[
+    'rank', 'country_name', 'region', 'total_score',
+    'score_market_opportunity', 'score_decarbonization_opportunity',
+    'score_business_environment', 'score_energy_security', 'cluster_label',
+]].copy()
+
+full.columns = [
+    'Rank', 'Country', 'Region', 'Total Score',
+    'Market Opp.', 'Decarbonisation', 'Business Env.', 'Energy Sec.', 'Archetype',
+]
+
+num_cols_f = ['Total Score', 'Market Opp.', 'Decarbonisation', 'Business Env.', 'Energy Sec.']
+for c in num_cols_f:
+    full[c] = pd.to_numeric(full[c], errors='coerce').round(1)
+
+def color_archetype_cell(val):
+    return {
+        'Ready Markets':      'background-color: #D4EDDA; color: #0D4028; font-weight: 600',
+        'Transition Markets': 'background-color: #FFF3CD; color: #5A3D00; font-weight: 600',
+        'Watch & Wait':       'background-color: #FDECEA; color: #7A1F1F; font-weight: 600',
+    }.get(val, '')
+
+(
+    full.style
+    .set_table_styles(TABLE_STYLES)
+    .map(score_bg, subset=['Market Opp.', 'Decarbonisation', 'Business Env.', 'Energy Sec.'])
+    .map(color_archetype_cell, subset=['Archetype'])
+    .bar(subset=['Total Score'], color=NAVY, vmin=0, vmax=100, props='width: 80px')
+    .format({c: '{:.1f}' for c in num_cols_f}, na_rep='—')
+    .hide(axis='index')
+)
+```
+
+## 7.2 Pipeline codes
+
+#### **Configuration**
+
+```{python}
+
+#| label: code-config
+#| code-summary: "Show config code"
+#| echo: true
+#| eval: false
+
+# config.yaml
+# -----------
+# Renewable Energy Investment Analyzer — project configuration
+# Business case: European renewable energy developer screening emerging
+# markets for solar/wind investment and grid infrastructure deployment.
+
+# ── Project metadata ───────────────────────────────────────────────────────
+project:
+  name:    Renewable Energy Market Analyzer
+  version: 3.0
+  sector:  Renewable Energy & Clean Power
+  client:  European Clean Energy Developer
+
+# ── Markets ────────────────────────────────────────────────────────────────
+# 20 emerging markets across three regions. ISO-3 codes throughout.
+countries:
+  SEA:
+    - VNM   # Vietnam
+    - IDN   # Indonesia
+    - PHL   # Philippines
+    - THA   # Thailand
+    - MYS   # Malaysia
+    - KHM   # Cambodia
+    - BGD   # Bangladesh
+  Africa:
+    - KEN   # Kenya
+    - NGA   # Nigeria
+    - GHA   # Ghana
+    - ETH   # Ethiopia
+    - TZA   # Tanzania
+    - SEN   # Senegal
+    - CIV   # Côte d'Ivoire
+    - MAR   # Morocco
+  LatAm:
+    - BRA   # Brazil
+    - MEX   # Mexico
+    - COL   # Colombia
+    - PER   # Peru
+    - CHL   # Chile
+
+# ── Weight scenarios ───────────────────────────────────────────────────────
+# Four investor philosophies tested in sensitivity analysis.
+# Weights must sum to 1.0 per scenario.
+# Energy Security is fixed at 0.05 across all scenarios —
+# it acts as a tiebreaker rather than a primary driver.
+weight_scenarios:
+
+  balanced:
+    # Neutral reference scenario; no single dimension dominates.
+    market_opportunity:          0.30
+    decarbonization_opportunity: 0.45
+    business_environment:        0.20
+    energy_security:             0.05
+
+  growth_focused:
+    # Favours large, fast-growing energy markets (commercial funds, utilities).
+    market_opportunity:          0.55
+    decarbonization_opportunity: 0.25
+    business_environment:        0.15
+    energy_security:             0.05
+
+  impact_first:
+    # Maximises fossil-fuel replacement potential (DFIs, climate-impact funds).
+    market_opportunity:          0.20
+    decarbonization_opportunity: 0.60
+    business_environment:        0.15
+    energy_security:             0.05
+
+  risk_averse:
+    # Prioritises institutional quality (pension funds, insurance-backed capital).
+    market_opportunity:          0.25
+    decarbonization_opportunity: 0.30
+    business_environment:        0.40
+    energy_security:             0.05
+
+# ── Indicators ─────────────────────────────────────────────────────────────
+# All sourced from World Bank Open Data API (2018–2023 average).
+# direction: higher_is_better | lower_is_better
+# weight:    relative weight within dimension (must sum to 1.0 per dimension)
+indicators:
+
+  market_opportunity:
+    gdp_growth_per_capita:
+      description:  "GDP per capita growth rate — market expansion trajectory"
+      wb_indicator: "NY.GDP.PCAP.KD.ZG"
+      direction:    higher_is_better
+      weight:       0.30
+
+    electricity_consumption:
+      description:  "Electric power consumption per capita (kWh) — energy market size"
+      wb_indicator: "EG.USE.ELEC.KH.PC"
+      direction:    higher_is_better
+      weight:       0.35
+
+    population_growth:
+      description:  "Annual population growth rate — long-run demand driver"
+      wb_indicator: "SP.POP.GROW"
+      direction:    higher_is_better
+      weight:       0.20
+
+    urbanization_rate:
+      description:  "Urban population as % of total — urban energy demand concentration"
+      wb_indicator: "SP.URB.TOTL.IN.ZS"
+      direction:    higher_is_better
+      weight:       0.15
+
+  decarbonization_opportunity:
+    energy_use_per_capita:
+      description:  "Energy consumption per capita — proxy for carbon intensity"
+      wb_indicator: "EG.USE.PCAP.KG.OE"
+      direction:    higher_is_better
+      weight:       0.35
+
+    fossil_fuel_consumption:
+      description:  "Fossil fuel energy consumption (% of total) — replacement opportunity"
+      wb_indicator: "EG.USE.COMM.FO.ZS"
+      direction:    higher_is_better
+      weight:       0.30
+
+    renewable_energy_gap:
+      description:  "Renewable energy consumption (% of total) — lower = higher growth runway"
+      wb_indicator: "EG.FEC.RNEW.ZS"
+      direction:    lower_is_better
+      weight:       0.25
+
+    electricity_access:
+      description:  "Access to electricity (% of population) — infrastructure maturity signal"
+      wb_indicator: "EG.ELC.ACCS.ZS"
+      direction:    higher_is_better
+      weight:       0.10
+
+  business_environment:
+    political_stability:
+      description:  "Political Stability and Absence of Violence/Terrorism — project execution risk"
+      wb_indicator: "PV.EST"
+      direction:    higher_is_better
+      weight:       0.30
+
+    regulatory_quality:
+      description:  "Regulatory Quality — ability to formulate and implement sound policies"
+      wb_indicator: "RQ.EST"
+      direction:    higher_is_better
+      weight:       0.30
+
+    rule_of_law:
+      description:  "Rule of Law — contract enforcement and property rights"
+      wb_indicator: "RL.EST"
+      direction:    higher_is_better
+      weight:       0.25
+
+    control_of_corruption:
+      description:  "Control of Corruption — procurement integrity"
+      wb_indicator: "CC.EST"
+      direction:    higher_is_better
+      weight:       0.15
+
+  energy_security:
+    energy_imports:
+      description:  "Net energy imports (% of energy use) — import dependency"
+      wb_indicator: "EG.IMP.CONS.ZS"
+      direction:    higher_is_better
+      weight:       0.60
+
+    alternative_nuclear_energy:
+      description:  "Alternative and nuclear energy (% of total) — lower = higher renewable need"
+      wb_indicator: "EG.USE.COMM.CL.ZS"
+      direction:    lower_is_better
+      weight:       0.40
+
+# ── Data settings ──────────────────────────────────────────────────────────
+data:
+  year_range:
+    start: 2018
+    end:   2023
+
+# ── Clustering settings ────────────────────────────────────────────────────
+# k=3 produces the three archetypes used throughout the report and dashboard:
+#   Ready Markets · Transition Markets · Watch & Wait
+# Changing k here requires updating CLUSTER_LABELS in clustering.py.
+clustering:
+  n_clusters:   3
+  random_state: 42
+
+# ── Output paths ───────────────────────────────────────────────────────────
+outputs:
+  scores_file:      "outputs/market_scores.csv"
+  clusters_file:    "outputs/market_clusters.csv"
+  sensitivity_file: "outputs/sensitivity_analysis.csv"
+
+```
+
+#### **Data ingestion**
+
+```{python}
+#| label: code-data-ingestion
+#| code-summary: "Show data ingestion code"
+#| eval: false
+
+"""
+data_ingestion.py
+-----------------
+Fetches all World Bank indicators.
+
+For each indicator, both raw yearly values and 6-year means are produced.
+Outputs:
+    data/raw/<indicator>_raw.csv          one file per indicator
+    data/raw/all_indicators_raw.csv       combined multi-index file
+    data/raw/data_quality_metadata.csv    completeness report
+    data/processed/indicators.csv         6-year means (input to preprocessing)
+    data/processed/indicators_metadata.json
+"""
+
+import json
+import yaml
+import pandas as pd
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
+
+import wbgapi as wb
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+
+# Configuration 
+
+def load_config(config_path: str = "config/config.yaml") -> dict:
+    """Load project configuration from YAML."""
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f)
+
+
+def get_all_country_codes(config: dict) -> List[str]:
+    """Flatten all regional country codes into a single list."""
+    return [
+        code
+        for region_countries in config["countries"].values()
+        for code in region_countries
+    ]
+
+
+#  World Bank API 
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def _fetch_from_api(
+    indicator: str,
+    countries: List[str],
+    start_year: int,
+    end_year: int,
+) -> pd.DataFrame:
+    """
+    Call the World Bank API with automatic retry on failure.
+
+    Retries up to 3 times with exponential back-off (4–10 s) to handle
+    transient network errors or API rate limits.
+    """
+    return wb.data.DataFrame(
+        indicator,
+        economy=countries,
+        time=range(start_year, end_year + 1),
+        skipBlanks=True,
+        labels=False,
+    )
+
+
+def fetch_indicator(
+    wb_code: str,
+    indicator_name: str,
+    countries: List[str],
+    start_year: int,
+    end_year: int,
+    min_obs: int = 3,
+) -> Tuple[pd.Series, pd.DataFrame]:
+    """
+    Fetch one World Bank indicator and return its 6-year mean and raw yearly data.
+
+    Countries with fewer than `min_obs` non-null observations across the
+    period are marked NaN in the mean series — they will be imputed later
+    in preprocessing.py rather than silently averaged over sparse data.
+
+    Args:
+        wb_code:        World Bank indicator code (e.g. 'NY.GDP.PCAP.KD.ZG')
+        indicator_name: Internal column name used throughout the pipeline
+        countries:      ISO-3 country codes
+        start_year:     First year of the fetch window
+        end_year:       Last year of the fetch window
+        min_obs:        Minimum non-null observations required to compute a mean
+
+    Returns:
+        mean_series:  pd.Series  — one value per country (6-year mean)
+        raw_df:       pd.DataFrame — one column per year, one row per country
+    """
+    print(f"  Fetching {indicator_name} ({wb_code}) ...", end=" ")
+
+    try:
+        raw_df = _fetch_from_api(wb_code, countries, start_year, end_year)
+
+        # Normalise year column names: 'YR2018' → 2018
+        raw_df.columns     = [int(str(c).replace("YR", "")) for c in raw_df.columns]
+        raw_df.index.name  = "country_code"
+
+        # Compute mean; set to NaN where observations are too sparse
+        obs_count  = raw_df.count(axis=1)
+        mean_series = raw_df.mean(axis=1)
+        mean_series[obs_count < min_obs] = float("nan")
+        mean_series.name = indicator_name
+
+        print(f"✓  ({raw_df.shape[1]} years, "
+              f"{obs_count.ge(min_obs).sum()}/{len(countries)} countries complete)")
+        return mean_series, raw_df
+
+    except Exception as exc:
+        print(f"✗  {exc}")
+        # Return empty placeholders so the pipeline can continue and
+        # report the gap rather than crash mid-run.
+        empty_mean = pd.Series(float("nan"), index=countries, name=indicator_name)
+        empty_raw  = pd.DataFrame(
+            index=countries, columns=range(start_year, end_year + 1)
+        )
+        return empty_mean, empty_raw
+
+
+#  Main ingestion 
+
+def fetch_all_indicators(
+    config: dict,
+    export_raw: bool = True,
+    raw_data_dir: str = "data/raw",
+) -> pd.DataFrame:
+    """
+    Iterate over every indicator in config, fetch data, and return 6-year means.
+
+    Args:
+        config:       Loaded project configuration
+        export_raw:   Write per-indicator CSVs and a combined file to disk
+        raw_data_dir: Directory for raw yearly data files
+
+    Returns:
+        pd.DataFrame: rows = countries, columns = indicators (6-year means)
+    """
+    countries  = get_all_country_codes(config)
+    start_year = config["data"]["year_range"]["start"]
+    end_year   = config["data"]["year_range"]["end"]
+
+    print(f"\n{'=' * 60}")
+    print(f"DATA INGESTION  ·  {start_year}–{end_year}  ·  {len(countries)} countries")
+    print(f"{'=' * 60}")
+
+    means_list      = []   
+    raw_data        = {}   
+    quality_records = []   
+
+    for dimension, indicators in config["indicators"].items():
+        print(f"\n  {dimension.upper().replace('_', ' ')}")
+
+        for indicator_name, props in indicators.items():
+            wb_code = props.get("wb_indicator")
+
+            # Skip indicators without a World Bank code (e.g. manual entries)
+            if not wb_code or props.get("source") == "manual_research":
+                continue
+
+            mean_series, raw_df = fetch_indicator(
+                wb_code, indicator_name, countries,
+                start_year, end_year, min_obs=3,
+            )
+
+            means_list.append(mean_series)
+
+            if export_raw:
+                raw_data[indicator_name] = raw_df
+
+            # Record completeness for the quality report
+            obs_count = raw_df.count(axis=1)
+            n_years   = raw_df.shape[1]
+            quality_records.append({
+                "indicator":          indicator_name,
+                "dimension":          dimension,
+                "wb_code":            wb_code,
+                "period":             f"{start_year}–{end_year}",
+                "avg_completeness_%": round((obs_count / n_years * 100).mean(), 1),
+                "countries_complete": int((obs_count == n_years).sum()),
+                "countries_partial":  int(((obs_count > 0) & (obs_count < n_years)).sum()),
+                "countries_missing":  int((obs_count == 0).sum()),
+            })
+
+    #  Export raw data 
+    if export_raw and raw_data:
+        raw_dir = Path(raw_data_dir)
+        raw_dir.mkdir(parents=True, exist_ok=True)
+
+        for name, df in raw_data.items():
+            df.to_csv(raw_dir / f"{name}_raw.csv")
+
+        # Combined multi-index file (indicator × year)
+        combined = pd.concat(raw_data.values(), keys=raw_data.keys(), axis=1)
+        combined.columns.names = ["indicator", "year"]
+        combined.to_csv(raw_dir / "all_indicators_raw.csv")
+
+        # Data quality report
+        if quality_records:
+            pd.DataFrame(quality_records).to_csv(
+                raw_dir / "data_quality_metadata.csv", index=False
+            )
+
+        print(f"\n  Raw data written to {raw_data_dir}/")
+
+    #  Assemble means DataFrame 
+    df = pd.concat(means_list, axis=1)
+    df.index.name = "country_code"
+
+    #  Quality summary 
+    if quality_records:
+        qdf = pd.DataFrame(quality_records)
+        print(f"\n{'=' * 60}")
+        print("DATA QUALITY SUMMARY")
+        print(f"{'=' * 60}")
+        for dim, grp in qdf.groupby("dimension"):
+            print(f"  {dim:30s} {grp['avg_completeness_%'].mean():.1f}% complete")
+        print(f"\n  Overall avg completeness : "
+              f"{qdf['avg_completeness_%'].mean():.1f}%")
+        print(f"  Fully complete indicators: "
+              f"{(qdf['countries_missing'] == 0).sum()} / {len(qdf)}")
+
+    print(f"\n{'=' * 60}")
+    print(f"INGESTION COMPLETE")
+    print(f"  {len(df)} countries × {len(df.columns)} indicators (6-year means)")
+    print(f"  Next: python preprocessing.py")
+    print(f"{'=' * 60}\n")
+
+    return df
+
+
+#  Export 
+
+def export_processed_data(
+    df: pd.DataFrame,
+    output_path: str = "data/processed/indicators.csv",
+) -> None:
+    """
+    Write 6-year means to CSV and save a JSON metadata sidecar.
+
+    The metadata file is read by preprocessing.py to log the data period
+    and aggregation method in the preprocessing output.
+    """
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path)
+
+    metadata = {
+        "ingestion_timestamp": datetime.now().isoformat(),
+        "years":               "see config",
+        "aggregation":         "6-year mean",
+        "n_countries":         len(df),
+        "n_indicators":        len(df.columns),
+        "indicators":          list(df.columns),
+    }
+    metadata_path = path.parent / "indicators_metadata.json"
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2, default=str)
+
+    print(f"✓ Means saved    → {path}")
+    print(f"✓ Metadata saved → {metadata_path}")
+
+
+#  Validation (optional QA step) 
+
+def validate_means_against_raw(
+    df_means: pd.DataFrame,
+    indicator_name: str,
+    raw_data_dir: str = "data/raw",
+) -> bool:
+    """
+    Verify that the stored 6-year mean matches the mean recomputed from raw data.
+
+    Useful as a spot-check after ingestion to catch any column-alignment
+    or index mismatch issues introduced during concatenation.
+    """
+    filepath = Path(raw_data_dir) / f"{indicator_name}_raw.csv"
+    if not filepath.exists():
+        print(f"  No raw file for {indicator_name} — skipping validation")
+        return False
+
+    raw_df     = pd.read_csv(filepath, index_col=0)
+    recalc     = raw_df.mean(axis=1)
+    stored     = df_means.get(indicator_name)
+
+    if stored is None:
+        print(f"  {indicator_name} not found in means DataFrame")
+        return False
+
+    common     = recalc.index.intersection(stored.index)
+    delta      = (recalc.loc[common] - stored.loc[common]).abs()
+    passed     = (delta < 1e-10).all()
+
+    if passed:
+        print(f"  ✓ {indicator_name} validation passed")
+    else:
+        mismatches = common[delta >= 1e-10].tolist()
+        print(f"  ✗ {indicator_name} mismatches: {mismatches}")
+
+    return passed
+
+
+#  Run 
+
+if __name__ == "__main__":
+    config = load_config()
+
+    df = fetch_all_indicators(config, export_raw=True)
+    export_processed_data(df)
+
+    # Spot-check the first successfully fetched indicator
+    first_col = next((c for c in df.columns if df[c].notna().any()), None)
+    if first_col:
+        print(f"\nValidating {first_col} ...")
+        validate_means_against_raw(df, first_col)
+```
+
+#### **Preprocessing**
+
+```{python}
+#| label: code-preprocessing
+#| code-summary: "Show preprocessing code"
+#| eval: false
+
+"""
+preprocessing.py
+----------------
+Cleans and normalises raw indicator data before scoring.
+
+Pipeline:
+    1. Load 6-year means from data/processed/indicators.csv
+    2. Add region labels
+    3. Impute missing values (regional median, global fallback)
+    4. Winsorise outliers (5th / 95th percentile)
+    5. Flip direction of lower_is_better indicators
+    6. Min-max normalise all indicators to 0–100
+    7. Validate and export
+"""
+
+import json
+import yaml
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from typing import Dict, List
+
+
+#  Configuration 
+
+def load_config(config_path: str = "config/config.yaml") -> dict:
+    """Load project configuration from YAML."""
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f)
+
+
+def get_indicator_directions(config: dict) -> Dict[str, str]:
+    """Return {indicator_name: direction} for all indicators in config."""
+    return {
+        name: props["direction"]
+        for dim in config["indicators"].values()
+        for name, props in dim.items()
+    }
+
+
+def get_all_indicator_names(config: dict) -> List[str]:
+    """Return a flat list of all indicator column names."""
+    return [
+        name
+        for dim in config["indicators"].values()
+        for name in dim
+    ]
+
+
+#  Data loading 
+
+def load_processed_data(
+    data_path: str = "data/processed/indicators.csv",
+) -> pd.DataFrame:
+    """
+    Load 6-year mean data produced by data_ingestion.py.
+
+    Raises FileNotFoundError if the file does not exist,
+    prompting the user to run data_ingestion.py first.
+    """
+    path = Path(data_path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Processed data not found at {path}. Run data_ingestion.py first."
+        )
+
+    df = pd.read_csv(path, index_col=0)
+    print(f"✓ Loaded {len(df)} countries × {len(df.columns)} indicators")
+
+    # Log data period from accompanying metadata if available
+    metadata_path = path.parent / "indicators_metadata.json"
+    if metadata_path.exists():
+        with open(metadata_path) as f:
+            meta = json.load(f)
+        print(f"  Period: {meta.get('years', 'N/A')}  |  "
+              f"Aggregation: {meta.get('aggregation', 'N/A')}")
+
+    return df
+
+
+#  Region labelling 
+
+def add_region_labels(df: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """
+    Add a 'region' column derived from config country lists.
+    Skips if the column already exists.
+    """
+    if "region" in df.columns:
+        return df
+
+    region_map = {
+        code: region
+        for region, codes in config["countries"].items()
+        for code in codes
+    }
+
+    df = df.copy()
+    df["region"] = df.index.map(region_map)
+
+    missing = df[df["region"].isna()].index.tolist()
+    if missing:
+        print(f"  ⚠ No region mapping for: {missing}")
+
+    return df
+
+
+#  Missing value handling 
+
+def report_missing_values(df: pd.DataFrame, indicator_cols: List[str]) -> None:
+    """Print a concise summary of missing values per indicator."""
+    print("\n[Missing Values]")
+    found = False
+    for col in indicator_cols:
+        if col not in df.columns:
+            continue
+        n = df[col].isna().sum()
+        if n > 0:
+            print(f"  {col}: {n} missing ({n / len(df) * 100:.1f}%)")
+            found = True
+    if not found:
+        print("  ✓ No missing values")
+
+
+def impute_missing_values(
+    df: pd.DataFrame, indicator_cols: List[str]
+) -> pd.DataFrame:
+    """
+    Fill missing values using regional median with a global median fallback.
+
+    Regional imputation is preferred because countries in the same region
+    (e.g. Southeast Asia) share similar energy infrastructure and
+    economic development patterns, making peers more informative than
+    the global sample for energy and emissions indicators.
+    """
+    df = df.copy()
+
+    for col in indicator_cols:
+        if col not in df.columns or df[col].isna().sum() == 0:
+            continue
+
+        n_before = df[col].isna().sum()
+
+        # Primary: regional median
+        df[col] = df[col].fillna(df.groupby("region")[col].transform("median"))
+
+        # Fallback: global median (handles cases where the full region is missing)
+        n_after_regional = df[col].isna().sum()
+        df[col] = df[col].fillna(df[col].median())
+
+        print(f"  {col}: {n_before} missing → "
+              f"{n_after_regional} after regional → 0 after global fallback")
+
+    return df
+
+
+#  Outlier handling 
+
+def winsorize(
+    df: pd.DataFrame,
+    indicator_cols: List[str],
+    lower: float = 0.05,
+    upper: float = 0.95,
+) -> pd.DataFrame:
+    """
+    Cap extreme values at the lower and upper percentiles.
+
+    Winsorising at the 5th / 95th percentile prevents outliers — such as
+    oil-rich economies with extreme energy import values or small island
+    states with atypical emissions — from compressing variation for the
+    majority of countries in the 0–100 normalised scale.
+    """
+    df = df.copy()
+
+    for col in indicator_cols:
+        if col not in df.columns:
+            continue
+
+        lo, hi   = df[col].quantile(lower), df[col].quantile(upper)
+        n_low    = (df[col] < lo).sum()
+        n_high   = (df[col] > hi).sum()
+
+        df[col]  = df[col].clip(lo, hi)
+
+        if n_low > 0 or n_high > 0:
+            print(f"  {col}: capped {n_low} below p{int(lower*100)}, "
+                  f"{n_high} above p{int(upper*100)}")
+
+    return df
+
+
+#  Direction normalisation 
+
+def flip_lower_is_better(
+    df: pd.DataFrame, directions: Dict[str, str]
+) -> pd.DataFrame:
+    """
+    Invert indicators where a lower raw value signals greater opportunity.
+
+    xamples:
+      - modern_renewable_share:   low current modern renewables = high growth runway
+      - electricity_imports:      low imports = less grid dependency (higher energy security)
+
+    Multiplying by -1 ensures all indicators point the same direction
+    (higher normalised score = better opportunity) before aggregation.
+    """
+    df     = df.copy()
+    flipped = [
+        col for col, direction in directions.items()
+        if col in df.columns and direction == "lower_is_better"
+    ]
+
+    for col in flipped:
+        df[col] *= -1
+
+    if flipped:
+        print(f"  Inverted {len(flipped)} indicator(s): {flipped}")
+
+    return df
+
+
+#  Normalisation 
+
+def min_max_normalize(
+    df: pd.DataFrame, indicator_cols: List[str]
+) -> pd.DataFrame:
+    """
+    Scale all indicators to a 0–100 range.
+
+    Formula: score = (value - min) / (max - min) × 100
+
+    100 = best-performing country in the sample
+    0   = worst-performing country in the sample
+    50  = midpoint
+
+    This puts GDP growth (%), CO2 emissions (t/capita), and governance
+    indices (–2.5 to +2.5) on a common footing for weighted aggregation.
+    If all countries have the same value, the indicator is set to 50.
+    """
+    df = df.copy()
+
+    for col in indicator_cols:
+        if col not in df.columns:
+            continue
+
+        lo, hi = df[col].min(), df[col].max()
+
+        if lo == hi:
+            
+            df[col] = 50.0
+        else:
+            df[col] = ((df[col] - lo) / (hi - lo) * 100).round(2)
+
+    return df
+
+
+#  Validation 
+
+def validate_normalization(
+    df: pd.DataFrame, indicator_cols: List[str]
+) -> bool:
+    """
+    Assert all indicators are within [0, 100] after normalisation.
+    Returns True if all pass; logs failures otherwise.
+    """
+    failures = []
+
+    for col in indicator_cols:
+        if col not in df.columns:
+            continue
+        lo, hi = df[col].min(), df[col].max()
+        if lo < -1e-10 or hi > 100 + 1e-10:
+            failures.append(f"  ✗ {col}: [{lo:.2f}, {hi:.2f}] — out of bounds")
+
+    if failures:
+        print("\n[Validation — FAILED]")
+        for f in failures:
+            print(f)
+        return False
+
+    print("  ✓ All indicators within [0, 100]")
+    return True
+
+
+#  Export 
+
+def export_normalized_data(
+    df: pd.DataFrame,
+    output_path: str = "data/processed/normalized_indicators.csv",
+) -> None:
+    """Write normalised data to CSV, creating parent directories as needed."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path)
+    print(f"✓ Saved normalised data → {path}")
+
+
+#  Orchestrator 
+
+def run_preprocessing(
+    input_path:  str = "data/processed/indicators.csv",
+    output_path: str = "data/processed/normalized_indicators.csv",
+    config_path: str = "config/config.yaml",
+) -> pd.DataFrame:
+    """
+    Run the full preprocessing pipeline and return a normalised DataFrame.
+
+    Args:
+        input_path:  Path to 6-year mean data from data_ingestion.py
+        output_path: Destination for normalised indicators CSV
+        config_path: Path to project configuration YAML
+
+    Returns:
+        pd.DataFrame: All values in [0, 100], ready for scoring.py
+    """
+    print("\n" + "=" * 60)
+    print("PREPROCESSING  ·  6-year means → normalised scores")
+    print("=" * 60)
+
+    config          = load_config(config_path)
+    indicator_cols  = get_all_indicator_names(config)
+    directions      = get_indicator_directions(config)
+
+    df = load_processed_data(input_path)
+    df = add_region_labels(df, config)
+
+    print(f"\n[Step 1] Missing values")
+    report_missing_values(df, indicator_cols)
+
+    print(f"\n[Step 2] Imputation (regional median → global fallback)")
+    df = impute_missing_values(df, indicator_cols)
+
+    print(f"\n[Step 3] Winsorisation (p5 / p95)")
+    df = winsorize(df, indicator_cols)
+
+    print(f"\n[Step 4] Direction alignment (invert lower_is_better)")
+    df = flip_lower_is_better(df, directions)
+
+    print(f"\n[Step 5] Min-max normalisation → [0, 100]")
+    df = min_max_normalize(df, indicator_cols)
+
+    print(f"\n[Step 6] Validation")
+    validate_normalization(df, indicator_cols)
+
+    export_normalized_data(df, output_path)
+
+    print(f"\n{'=' * 60}")
+    print(f"PREPROCESSING COMPLETE")
+    print(f"  {len(df)} countries × {len(indicator_cols)} indicators → [0, 100]")
+    print(f"  Next: python scoring.py")
+    print(f"{'=' * 60}\n")
+
+    return df
+
+
+# Run
+
+if __name__ == "__main__":
+    df = run_preprocessing()
+
+    # Spot-check: first 5 numeric columns, first 5 rows
+    sample_cols = df.select_dtypes(include=[np.number]).columns[:5]
+    print("Sample normalised values (first 5 countries):")
+    print(df[sample_cols].head().round(1))
+
+    print("\nAverage normalised scores by region:")
+    print(df.groupby("region")[sample_cols].mean().round(1))
+```
+
+#### **Scoring**
+
+```{python}
+#| label: code-scoring
+#| code-summary: "Show scoring code"
+#| eval: false
+
+"""
+scoring.py
+----------
+Computes weighted market attractiveness scores from normalised 0–100 data.
+
+Two outputs:
+    1. score_single_scenario()    — scores under one weight scenario
+    2. run_sensitivity_analysis() — scores under all four scenarios,
+       testing whether recommendations hold across different assumptions
+"""
+
+import yaml
+import pandas as pd
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+
+#  Configuration 
+
+def load_config(config_path: str = "config/config.yaml") -> dict:
+    """Load project configuration from YAML."""
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f)
+
+
+def get_dimension_indicators(config: dict) -> Dict[str, List[str]]:
+    """Return {dimension: [indicator_names]} for all dimensions in config."""
+    return {
+        dim: list(indicators.keys())
+        for dim, indicators in config["indicators"].items()
+    }
+
+
+#  Data loading 
+
+def load_normalized_data(
+    data_path: str = "data/processed/normalized_indicators.csv",
+) -> pd.DataFrame:
+    """
+    Load normalised 0–100 indicator data produced by preprocessing.py.
+
+    Raises FileNotFoundError if the file is absent, prompting the user
+    to run preprocessing.py first.
+    """
+    path = Path(data_path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Normalised data not found at {path}. Run preprocessing.py first."
+        )
+
+    df = pd.read_csv(path, index_col=0)
+    print(f"✓ Loaded {len(df)} countries × {len(df.columns)} indicators")
+
+    if "region" not in df.columns:
+        print("  ⚠ No 'region' column — regional breakdowns will be unavailable")
+
+    return df
+
+
+#  Dimension scoring 
+
+def compute_dimension_score(
+    df: pd.DataFrame,
+    dimension: str,
+    indicator_config: dict,
+    indicator_names: List[str],
+) -> pd.Series:
+    """
+    Compute one dimension score as a weighted average of its indicators.
+
+    If some indicators are missing from the data, their weights are
+    redistributed proportionally across the remaining indicators so the
+    dimension score remains on a 0–100 scale.
+
+    Args:
+        df:               Normalised indicator data
+        dimension:        Dimension key (e.g. 'market_opportunity')
+        indicator_config: Full config['indicators'] dict
+        indicator_names:  Ordered list of indicator names for this dimension
+
+    Returns:
+        pd.Series: Dimension scores (0–100), indexed by country_code
+    """
+    weighted = pd.Series(0.0, index=df.index)
+    total_weight = 0.0
+
+    for name in indicator_names:
+        props = indicator_config[dimension].get(name)
+        if props is None:
+            print(f"  ⚠ '{name}' not in config — skipping")
+            continue
+
+        if name not in df.columns:
+            print(f"  ⚠ '{name}' not in data — skipping")
+            continue
+
+        if df[name].isna().all():
+            print(f"  ⚠ '{name}' is entirely NaN — skipping")
+            continue
+
+        weight        = props["weight"]
+        weighted     += df[name] * weight
+        total_weight += weight
+
+    if total_weight == 0:
+        print(f"  ✗ All indicators missing for {dimension}")
+        return pd.Series(float("nan"), index=df.index)
+
+    # Redistribute weights if any indicators were skipped
+    if total_weight < sum(
+        indicator_config[dimension][n]["weight"]
+        for n in indicator_names
+        if n in indicator_config[dimension]
+    ):
+        used = sum(
+            1 for n in indicator_names
+            if n in df.columns and not df[n].isna().all()
+        )
+        print(f"  {dimension}: {used}/{len(indicator_names)} indicators "
+              f"(weights redistributed)")
+
+    return (weighted / total_weight).round(2)
+
+
+#  Single-scenario scoring 
+
+def score_single_scenario(
+    df: pd.DataFrame,
+    config: dict,
+    scenario: str = "balanced",
+) -> pd.DataFrame:
+    """
+    Score all markets under one weight scenario.
+
+    Returns a DataFrame with:
+        - score_<dimension>   one column per dimension (0–100)
+        - total_score         weighted sum of dimension scores (0–100)
+        - rank                1 = most attractive market
+        - region              copied from df if present
+
+    Args:
+        df:       Normalised indicator data
+        config:   Project configuration
+        scenario: Key in config['weight_scenarios']
+
+    Returns:
+        pd.DataFrame sorted by rank ascending
+    """
+    print(f"\n[Scoring] Scenario: {scenario}")
+
+    dim_weights   = config["weight_scenarios"][scenario]
+    ind_config    = config["indicators"]
+    dim_map       = get_dimension_indicators(config)
+
+    scores = pd.DataFrame(index=df.index)
+
+    if "region" in df.columns:
+        scores["region"] = df["region"]
+
+    # Dimension scores
+    for dim, indicators in dim_map.items():
+        scores[f"score_{dim}"] = compute_dimension_score(
+            df, dim, ind_config, indicators
+        )
+
+    # Weighted total
+    scores["total_score"] = 0.0
+    total_weight_used     = 0.0
+
+    for dim, weight in dim_weights.items():
+        col = f"score_{dim}"
+        if col in scores.columns:
+            scores["total_score"] += scores[col] * weight
+            total_weight_used     += weight
+
+    # Renormalise if any dimension was unavailable
+    if 0 < total_weight_used < 1.0:
+        scores["total_score"] /= total_weight_used
+        print(f"  Note: Renormalised — used {total_weight_used:.2f} of total weight")
+
+    scores["total_score"] = scores["total_score"].round(2)
+    scores["rank"]        = (
+        scores["total_score"]
+        .rank(ascending=False, method="min", na_option="bottom")
+        .astype("Int64")
+    )
+
+    scores = scores.sort_values("rank")
+    print(f"  Top 3: {scores.index[:3].tolist()}")
+    return scores
+
+
+#  Sensitivity analysis 
+
+def classify_stability(std: float) -> str:
+    """Map rank standard deviation to a human-readable stability label."""
+    if std <= 1.5:
+        return "Very High"
+    if std <= 3.0:
+        return "High"
+    if std <= 5.0:
+        return "Medium"
+    return "Low"
+
+
+def run_sensitivity_analysis(
+    df: pd.DataFrame, config: dict
+) -> pd.DataFrame:
+    """
+    Score all markets under every defined weight scenario and measure rank stability.
+
+    A low rank standard deviation means the country's position is robust to
+    changes in investor preferences — a strong signal for capital allocation.
+
+    Returns a DataFrame with:
+        - score_<scenario>     total score per scenario
+        - rank_<scenario>      rank per scenario
+        - avg_rank             mean rank across scenarios
+        - rank_std             standard deviation of ranks (stability proxy)
+        - rank_min / rank_max  best and worst rank observed
+        - rank_range           max − min
+        - stability            Very High / High / Medium / Low
+        - region               copied from df if present
+
+    Returns:
+        pd.DataFrame sorted by avg_rank ascending
+    """
+    scenarios = list(config["weight_scenarios"].keys())
+
+    print(f"\n{'=' * 60}")
+    print(f"SENSITIVITY ANALYSIS  ·  {len(scenarios)} scenarios: {scenarios}")
+    print(f"{'=' * 60}")
+
+    score_cols = {}
+    rank_cols  = {}
+
+    for scenario in scenarios:
+        result                  = score_single_scenario(df, config, scenario)
+        score_cols[scenario]    = result["total_score"]
+        rank_cols[scenario]     = result["rank"]
+
+    # Assemble comparison table
+    comparison = pd.concat(
+        {f"score_{s}": score_cols[s] for s in scenarios}, axis=1
+    )
+    for s in scenarios:
+        comparison[f"rank_{s}"] = rank_cols[s]
+
+    rc = [f"rank_{s}" for s in scenarios]
+    comparison["avg_rank"]   = comparison[rc].mean(axis=1).round(1)
+    comparison["rank_std"]   = comparison[rc].std(axis=1).round(1)
+    comparison["rank_min"]   = comparison[rc].min(axis=1)
+    comparison["rank_max"]   = comparison[rc].max(axis=1)
+    comparison["rank_range"] = comparison["rank_max"] - comparison["rank_min"]
+    comparison["stability"]  = comparison["rank_std"].apply(classify_stability)
+
+    if "region" in df.columns:
+        comparison["region"] = df["region"]
+
+    comparison = comparison.sort_values("avg_rank")
+
+    # Summary
+    print(f"\n[Stability Summary]")
+    for label, count in comparison["stability"].value_counts().items():
+        print(f"  {label}: {count} ({count / len(comparison) * 100:.0f}%)")
+
+    print(f"\n[Top Stable Markets]")
+    stable = comparison[comparison["stability"].isin(["Very High", "High"])].head(5)
+    for code, row in stable.iterrows():
+        print(f"  {code}: avg rank {row['avg_rank']:.1f}  "
+              f"range {row['rank_range']:.0f}  {row['stability']}")
+
+    return comparison
+
+
+#  Export 
+
+def export_scores(
+    df: pd.DataFrame,
+    output_path: str = "outputs/market_scores.csv",
+) -> None:
+    """Write single-scenario scores to CSV."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path)
+    print(f"✓ Scores saved → {path}")
+
+
+def export_sensitivity(
+    df: pd.DataFrame,
+    output_path: str = "outputs/sensitivity_analysis.csv",
+) -> None:
+    """Write sensitivity analysis results to CSV."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path)
+    print(f"✓ Sensitivity saved → {path}")
+
+
+#  Orchestrator 
+
+def run_scoring(
+    processed_df: Optional[pd.DataFrame] = None,
+    data_path: str = "data/processed/normalized_indicators.csv",
+    config_path: str = "config/config.yaml",
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Run the full scoring pipeline and return both outputs.
+
+    Args:
+        processed_df: Pre-loaded normalised DataFrame (skips disk read if provided)
+        data_path:    Path to normalised indicators CSV
+        config_path:  Path to project configuration YAML
+
+    Returns:
+        (primary_scores, sensitivity_df)
+            primary_scores:  Balanced-scenario scores, sorted by rank
+            sensitivity_df:  Cross-scenario comparison with stability metrics
+    """
+    print(f"\n{'=' * 60}")
+    print("SCORING  ·  normalised data → market attractiveness scores")
+    print(f"{'=' * 60}")
+
+    config = load_config(config_path)
+
+    if processed_df is None:
+        processed_df = load_normalized_data(data_path)
+
+    primary_scores = score_single_scenario(processed_df, config, scenario="balanced")
+
+    print("\nTop 5 markets (balanced scenario):")
+    for code, row in primary_scores.head(5).iterrows():
+        region = row.get("region", "—")
+        print(f"  {code} ({region}): {row['total_score']:.1f}")
+
+    sensitivity_df = run_sensitivity_analysis(processed_df, config)
+
+    export_scores(primary_scores)
+    export_sensitivity(sensitivity_df)
+
+    print(f"\n{'=' * 60}")
+    print("SCORING COMPLETE  ·  Next: python clustering.py")
+    print(f"{'=' * 60}\n")
+
+    return primary_scores, sensitivity_df
+
+
+#  Run  
+
+if __name__ == "__main__":
+    primary_scores, sensitivity_df = run_scoring()
+
+    # Dimension score columns for the display table
+    dim_cols = [c for c in primary_scores.columns
+                if c.startswith("score_") and c != "score_total"]
+    display_cols = ["region", "total_score", "rank"] + dim_cols
+    display_cols = [c for c in display_cols if c in primary_scores.columns]
+
+    print("\nTop 10 markets — balanced scenario:")
+    print(primary_scores[display_cols].head(10).to_string())
+
+    print("\nStability breakdown:")
+    for label, count in sensitivity_df["stability"].value_counts().items():
+        print(f"  {label}: {count} ({count / len(sensitivity_df) * 100:.0f}%)")
+```
+
+#### **Clustering**
+
+```{python}
+#| label: code-clustering
+#| code-summary: "Show Clustering code"
+#| eval: false
+"""
+clustering.py
+-------------
+Groups countries into market archetypes using K-Means on dimension scores.
+
+Clusters are labelled by average total score (descending), producing
+business-meaningful archetypes such as Ready Markets and Watch & Wait.
+
+Steps:
+    1. Load dimension scores from scoring.py output
+    2. Standardise features (K-Means is distance-based)
+    3. Fit K-Means with k from config
+    4. Validate with silhouette score
+    5. Label clusters by average total score
+    6. Profile each cluster
+    7. Export results and optional visualisations
+"""
+
+import yaml
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.preprocessing import StandardScaler
+
+
+#  Configuration 
+
+def load_config(config_path: str = "config/config.yaml") -> dict:
+    """Load project configuration from YAML."""
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f)
+
+
+#  Data loading 
+
+def load_scores_data(
+    scores_path: str = "outputs/market_scores.csv",
+) -> pd.DataFrame:
+    """
+    Load primary scores produced by scoring.py.
+
+    Raises FileNotFoundError if the file is absent,
+    prompting the user to run scoring.py first.
+    """
+    path = Path(scores_path)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Scores not found at {path}. Run scoring.py first."
+        )
+
+    df = pd.read_csv(path, index_col=0)
+    dim_cols = _get_dim_cols(df)
+    print(f"✓ Loaded {len(df)} countries  ·  dimensions: {dim_cols}")
+    return df
+
+
+def _get_dim_cols(df: pd.DataFrame) -> List[str]:
+    """Return dimension score column names, excluding total and rank."""
+    return [
+        c for c in df.columns
+        if c.startswith("score_") and "total" not in c and "rank" not in c
+    ]
+
+
+#  Feature preparation 
+
+def prepare_features(scores_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Extract dimension score columns as the clustering feature matrix.
+
+    Dimension scores (rather than raw indicators) are used because they
+    are already on a common 0–100 scale and capture the business-relevant
+    groupings. Missing values are filled with column means before clustering.
+    """
+    dim_cols = _get_dim_cols(scores_df)
+
+    if not dim_cols:
+        raise ValueError(
+            "No dimension score columns found. "
+            "Expected columns like 'score_market_opportunity'. "
+            "Run scoring.py first."
+        )
+
+    features = scores_df[dim_cols].copy()
+
+    if features.isna().any().any():
+        print("  ⚠ Missing values in features — filling with column means")
+        features = features.fillna(features.mean())
+
+    print(f"  Feature matrix: {features.shape[0]} × {features.shape[1]}")
+    return features
+
+
+#  Optional k-validation 
+
+def validate_k(
+    features_scaled: np.ndarray,
+    max_k: int = 6,
+) -> pd.DataFrame:
+    """
+    Compute silhouette score and inertia for k = 2 … max_k.
+
+    Use this as a diagnostic check when the configured k is uncertain.
+    The configured k is used for the final fit regardless of this output.
+    """
+    print("\n[k-validation]")
+    records = []
+
+    for k in range(2, max_k + 1):
+        km        = KMeans(n_clusters=k, random_state=42, n_init=10)
+        labels    = km.fit_predict(features_scaled)
+        sil       = silhouette_score(features_scaled, labels)
+        records.append({"k": k, "silhouette": round(sil, 3), "inertia": round(km.inertia_)})
+        print(f"  k={k}: silhouette={sil:.3f}  inertia={km.inertia_:.0f}")
+
+    return pd.DataFrame(records)
+
+
+#  Cluster labelling 
+
+# Ordered labels assigned to clusters ranked by descending average total score.
+
+CLUSTER_LABELS = [
+    "Ready Markets",
+    "Transition Markets",
+    "Watch & Wait",
+]
+
+
+def label_clusters(df: pd.DataFrame, n_clusters: int) -> pd.DataFrame:
+    """
+    Label clusters by average total score rank.
+    
+    Because K-Means clusters on dimension profiles, a single outlier
+    indicator (e.g. Senegal's high Energy Security score) can pull a
+    country into a lower-scoring cluster despite a competitive total score.
+    Re-ranking clusters by their mean total score after fitting corrects
+    this without changing the clustering algorithm.
+    """
+    df = df.copy()
+
+    # Rank clusters by mean total score — highest mean = best label
+    cluster_means = (
+        df.groupby('cluster_id')['total_score']
+        .mean()
+        .sort_values(ascending=False)
+    )
+
+    label_map = {
+        cid: CLUSTER_LABELS[rank]
+        for rank, cid in enumerate(cluster_means.index)
+        if rank < len(CLUSTER_LABELS)
+    }
+
+    df['cluster_label'] = df['cluster_id'].map(label_map)
+
+    # ── Sanity check: flag countries whose label contradicts their rank ──
+    # If a country's total score is higher than the max of the cluster
+    # below it, it may be mislabelled due to dimension profile outliers.
+    # In that case, override based on score boundaries.
+    boundaries = (
+        df.groupby('cluster_label')['total_score']
+        .agg(['min', 'max'])
+        .reindex(CLUSTER_LABELS)
+    )
+
+    def resolve_label(row):
+        score = row['total_score']
+        for label in CLUSTER_LABELS:
+            if label not in boundaries.index:
+                continue
+            lo = boundaries.loc[label, 'min']
+            hi = boundaries.loc[label, 'max']
+            if lo <= score <= hi:
+                return label
+        return row['cluster_label']   
+
+    df['cluster_label'] = df.apply(resolve_label, axis=1)
+
+    print('\n[Cluster Labels]')
+    for label in CLUSTER_LABELS:
+        subset = df[df['cluster_label'] == label]
+        print(f'  {label}: {len(subset)} countries  '
+              f'(score {subset["total_score"].min():.1f}–'
+              f'{subset["total_score"].max():.1f})')
+
+    return df
+
+def apply_threshold_labels(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Override cluster labels with score-based thresholds.
+    
+    This preserves the 3-tier structure (Ready / Transition / Watch & Wait)
+    while using the cleaner indicator set. Thresholds are:
+        - Ready Markets:   total_score >= 70
+        - Watch & Wait:    total_score < 40
+        - Transition:      40 <= total_score < 70
+    """
+    df = df.copy()
+    
+    df['cluster_label'] = 'Transition Markets'  # default
+    
+    df.loc[df['total_score'] >= 70, 'cluster_label'] = 'Ready Markets'
+    df.loc[df['total_score'] < 40, 'cluster_label'] = 'Watch & Wait'
+    
+    print('\n[Threshold-based Labels]')
+    for label in ['Ready Markets', 'Transition Markets', 'Watch & Wait']:
+        subset = df[df['cluster_label'] == label]
+        if len(subset) > 0:
+            score_range = f"{subset['total_score'].min():.1f}–{subset['total_score'].max():.1f}"
+            print(f'  {label}: {len(subset)} countries  (score {score_range})')
+        else:
+            print(f'  {label}: 0 countries')
+    
+    return df
+
+#  Cluster profiling 
+
+def profile_clusters(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute mean and std of dimension scores and total score per cluster.
+
+    Returns a DataFrame indexed by cluster_label, sorted by
+    total_score_mean descending.
+    """
+    dim_cols  = _get_dim_cols(df)
+    agg_cols  = dim_cols + ["total_score"]
+
+    profile   = df.groupby("cluster_label")[agg_cols].agg(["mean", "std"]).round(1)
+    profile.columns = ["_".join(c) for c in profile.columns]
+    profile["n_countries"] = df.groupby("cluster_label").size()
+
+    return profile.sort_values("total_score_mean", ascending=False)
+
+
+#  Visualisations (optional) 
+
+def plot_cluster_radar(
+    df: pd.DataFrame,
+    output_path: str = "outputs/cluster_radar.png",
+) -> None:
+    """
+    Radar chart of average dimension scores per cluster.
+    Silently skipped if matplotlib is unavailable.
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("  matplotlib not installed — skipping radar chart")
+        return
+
+    dim_cols    = _get_dim_cols(df)
+    dim_labels  = [c.replace("score_", "").replace("_", " ").title() for c in dim_cols]
+    means       = df.groupby("cluster_label")[dim_cols].mean()
+
+    n    = len(dim_cols)
+    angles = np.linspace(0, 2 * np.pi, n, endpoint=False).tolist()
+    angles += angles[:1]   # close the polygon
+
+    fig, ax = plt.subplots(figsize=(9, 7), subplot_kw={"projection": "polar"})
+
+    for cluster in means.index:
+        vals = means.loc[cluster].tolist() + [means.loc[cluster].iloc[0]]
+        ax.plot(angles, vals, "o-", linewidth=2, label=cluster)
+        ax.fill(angles, vals, alpha=0.08)
+
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(dim_labels, size=10)
+    ax.set_ylim(0, 100)
+    ax.set_title("Cluster Profiles by Dimension", size=13, pad=20)
+    ax.legend(loc="upper right", bbox_to_anchor=(1.3, 1.0), fontsize=9)
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"✓ Radar chart → {output_path}")
+
+
+def plot_cluster_scatter(
+    df: pd.DataFrame,
+    output_path: str = "outputs/cluster_scatter.png",
+) -> None:
+    """
+    Scatter plot of total_score vs rank, coloured by cluster.
+    Annotates the top-3 and bottom-3 markets.
+    Silently skipped if matplotlib is unavailable.
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("  matplotlib not installed — skipping scatter plot")
+        return
+
+    fig, ax = plt.subplots(figsize=(11, 7))
+
+    for cluster in df["cluster_label"].unique():
+        sub = df[df["cluster_label"] == cluster]
+        ax.scatter(sub["rank"], sub["total_score"], label=cluster, s=90, alpha=0.75)
+
+    # Annotate top-3 and bottom-3 by rank
+    for code in df.head(3).index.tolist() + df.tail(3).index.tolist():
+        ax.annotate(
+            code,
+            (df.loc[code, "rank"], df.loc[code, "total_score"]),
+            xytext=(5, 5), textcoords="offset points", fontsize=8,
+        )
+
+    ax.invert_xaxis()   # rank 1 on the right
+    ax.set_xlabel("Rank")
+    ax.set_ylabel("Total Score (0–100)")
+    ax.set_title("Market Clusters — Score vs Rank")
+    ax.grid(True, alpha=0.25)
+    ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=9)
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"✓ Scatter plot → {output_path}")
+
+
+#  Export 
+
+def export_clusters(
+    df: pd.DataFrame,
+    output_path: str = "outputs/market_clusters.csv",
+) -> None:
+    """Write the full clustered DataFrame (all dimension columns intact) to CSV."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path)
+    print(f"✓ Cluster assignments → {path}  ({len(df)} countries)")
+
+
+def export_cluster_profiles(
+    profile: pd.DataFrame,
+    output_path: str = "outputs/cluster_profiles.csv",
+) -> None:
+    """Write cluster mean/std profiles to CSV."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    profile.to_csv(path)
+    print(f"✓ Cluster profiles    → {path}")
+
+
+#  Orchestrator 
+
+def run_clustering(
+    scores_df: Optional[pd.DataFrame] = None,
+    scores_path: str = "outputs/market_scores.csv",
+    config_path: str = "config/config.yaml",
+    run_k_validation: bool = False,
+) -> pd.DataFrame:
+    """
+    Run the full clustering pipeline and return the annotated DataFrame.
+    """
+    print(f"\n{'=' * 60}")
+    print("CLUSTERING  ·  dimension scores → market archetypes")
+    print(f"{'=' * 60}")
+
+    config       = load_config(config_path)
+    n_clusters   = config["clustering"]["n_clusters"]
+    random_state = config["clustering"]["random_state"]
+
+    if scores_df is None:
+        scores_df = load_scores_data(scores_path)
+
+    # Feature matrix
+    print("\n[Step 1] Preparing features")
+    features = prepare_features(scores_df)
+
+    # Standardise — K-Means is sensitive to scale
+    print("\n[Step 2] Standardising features")
+    features_scaled = StandardScaler().fit_transform(features)
+
+    # Optional k-sweep
+    if run_k_validation:
+        validate_k(features_scaled)
+
+    # Fit K-Means
+    print(f"\n[Step 3] K-Means  k={n_clusters}")
+    km           = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
+    clustered_df = scores_df.copy()
+    clustered_df["cluster_id"] = km.fit_predict(features_scaled)
+
+    # Silhouette validation
+    sil = silhouette_score(features_scaled, clustered_df["cluster_id"])
+    print(f"\n[Step 4] Silhouette score: {sil:.3f}", end="  ")
+    if sil >= 0.50:
+        print("(excellent separation)")
+    elif sil >= 0.30:
+        print("(good separation)")
+    elif sil >= 0.20:
+        print("(reasonable separation)")
+    else:
+        print("(weak separation — review dimensions or k)")
+
+    # Label clusters using score thresholds
+    print("\n[Step 5] Labelling clusters (threshold-based)")
+    clustered_df = apply_threshold_labels(clustered_df)
+
+    # Profile clusters
+    print("\n[Step 6] Cluster profiles")
+    profile = profile_clusters(clustered_df)
+    dim_cols = _get_dim_cols(clustered_df)
+
+    for label in profile.index:
+        n     = int(profile.loc[label, "n_countries"])
+        mean  = profile.loc[label, "total_score_mean"]
+        std   = profile.loc[label, "total_score_std"]
+        print(f"\n  {label}  (n={n}, score {mean:.1f} ± {std:.1f})")
+        for dim in dim_cols:
+            dm = profile.loc[label, f"{dim}_mean"]
+            ds = profile.loc[label, f"{dim}_std"]
+            print(f"    {dim.replace('score_','').replace('_',' '):30s} "
+                  f"{dm:.1f} ± {ds:.1f}")
+
+    # Country listing per cluster
+    print("\n[Step 7] Countries by cluster")
+    for label, grp in clustered_df.groupby("cluster_label"):
+        grp = grp.sort_values("total_score", ascending=False)
+        region_col = "region" if "region" in grp.columns else None
+        print(f"\n  {label}  ({len(grp)} countries):")
+        for code, row in grp.iterrows():
+            region = f"  {row['region']}" if region_col else ""
+            print(f"    {code}{region}: {row['total_score']:.1f}")
+
+    # Export
+    print("\n[Step 8] Exporting")
+    export_clusters(clustered_df)
+    export_cluster_profiles(profile)
+
+    # Visualisations
+    print("\n[Step 9] Visualisations")
+    plot_cluster_radar(clustered_df)
+    plot_cluster_scatter(clustered_df)
+
+    print(f"\n{'=' * 60}")
+    print("CLUSTERING COMPLETE")
+    print(f"{'=' * 60}\n")
+
+    return clustered_df
+
+
+#  Run
+
+if __name__ == "__main__":
+    df = run_clustering(run_k_validation=True)
+
+    display_cols = [c for c in ["region", "total_score", "rank", "cluster_label"]
+                    if c in df.columns]
+    print("\nTop 10 markets:")
+    print(df[display_cols].head(15).to_string())
+
+    print("\nCluster distribution:")
+    for label, count in df["cluster_label"].value_counts().items():
+        print(f"  {label}: {count} ({count / len(df) * 100:.0f}%)")
+```
+
+#### **Orchestration (main)**
+
+```{python}
+#| label: code-main
+#| code-summary: "Show main code"
+#| eval: false
+"""
+main.py
+-------
+Pipeline orchestrator.
+
+Runs all modules in sequence, then writes a plain-text executive summary.
+
+Steps:
+    1. Data Ingestion   — World Bank API fetch, 6-year means + raw export
+    2. Preprocessing    — imputation, winsorisation, 0–100 normalisation
+    3. Scoring          — weighted dimension scores + sensitivity analysis
+    4. Clustering       — K-Means market archetypes
+
+Usage:
+    python main.py
+"""
+
+import sys
+import time
+import subprocess
+import traceback
+from pathlib import Path
+from datetime import datetime
+
+import pandas as pd
+
+
+# ── Directory setup ────────────────────────────────────────────────────────
+
+OUTPUT_DIRS = [
+    "data/raw",
+    "data/processed",
+    "outputs",
+    "outputs/charts",
+]
+
+
+def ensure_output_dirs() -> None:
+    """Create all required output directories if they do not yet exist."""
+    for d in OUTPUT_DIRS:
+        Path(d).mkdir(parents=True, exist_ok=True)
+    print("✓ Output directories ready")
+
+
+# ── Step runner ────────────────────────────────────────
+
+def run_step(step_num: int, step_name: str, script_name: str) -> bool:
+    """
+    Execute one pipeline module as a subprocess.
+
+    Scripts are expected in the src/ directory. stdout is streamed to the
+    terminal; stderr is shown only when it contains an error.
+
+    Returns True on success, False on failure.
+    """
+    script_path = Path("src") / script_name
+
+    print(f"\n{'=' * 60}")
+    print(f"STEP {step_num}  ·  {step_name}")
+    print(f"{'=' * 60}")
+
+    if not script_path.exists():
+        print(f"  ✗ Script not found: {script_path}")
+        return False
+
+    t0 = time.time()
+
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script_path)],
+            capture_output=True,
+            text=True,
+        )
+
+        if result.stdout:
+            print(result.stdout)
+
+        # Only surface stderr when there is a genuine error
+        if result.stderr and "Error" in result.stderr:
+            print(f"  Warnings / errors:\n{result.stderr}")
+
+        elapsed = time.time() - t0
+
+        if result.returncode == 0:
+            print(f"  ✓ Completed in {elapsed:.1f} s")
+            return True
+
+        print(f"  ✗ Failed (exit code {result.returncode})")
+        if result.stderr:
+            print(result.stderr)
+        return False
+
+    except Exception as exc:
+        print(f"  ✗ Could not execute {script_path}: {exc}")
+        return False
+
+
+# ── Executive summary ─────────────────────────────────────────────────
+
+def generate_executive_summary() -> None:
+    """
+    Write a plain-text executive summary to outputs/executive_summary.txt.
+
+    Reads the cluster and sensitivity CSV files produced by the pipeline.
+    Skips gracefully if either file is absent.
+    """
+    print(f"\n{'=' * 60}")
+    print("EXECUTIVE SUMMARY")
+    print(f"{'=' * 60}")
+
+    clusters_path    = Path("outputs/market_clusters.csv")
+    sensitivity_path = Path("outputs/sensitivity_analysis.csv")
+
+    if not clusters_path.exists() or not sensitivity_path.exists():
+        print("  ⚠ Output files not found — skipping summary")
+        return
+
+    try:
+        df  = pd.read_csv(clusters_path,    index_col="country_code")
+        sens = pd.read_csv(sensitivity_path, index_col="country_code")
+
+        #  Top 5 
+        top5_lines = []
+        for i, (code, row) in enumerate(df.head(5).iterrows(), 1):
+            region  = row.get("region", "—")
+            score   = row["total_score"]
+            cluster = row.get("cluster_label", "—")
+            top5_lines.append(
+                f"  {i}. {code} ({region})\n"
+                f"     Score: {score:.1f}/100   Archetype: {cluster}"
+            )
+
+        #  Archetypes 
+        arch_lines = []
+        if "cluster_label" in df.columns:
+            stats = (
+                df.groupby("cluster_label")["total_score"]
+                .agg(["mean", "min", "max", "count"])
+                .round(1)
+                .sort_values("mean", ascending=False)
+            )
+            for label, row in stats.iterrows():
+                countries = df[df["cluster_label"] == label].index.tolist()
+                listed    = ", ".join(countries[:5])
+                if len(countries) > 5:
+                    listed += f" + {len(countries) - 5} more"
+                arch_lines.append(
+                    f"  {label}  (n={int(row['count'])}, "
+                    f"avg {row['mean']:.1f}, range {row['min']:.1f}–{row['max']:.1f})\n"
+                    f"    {listed}"
+                )
+
+        #  Regional summary 
+        region_lines = []
+        if "region" in df.columns:
+            reg = (
+                df.groupby("region")["total_score"]
+                .agg(["mean", "count"])
+                .round(1)
+                .sort_values("mean", ascending=False)
+            )
+            for region, row in reg.iterrows():
+                region_lines.append(
+                    f"  {region}: {row['mean']:.1f} avg  "
+                    f"({int(row['count'])} countries)"
+                )
+
+        #  Stability summary (from sensitivity analysis) 
+        stability_lines = []
+        if "stability" in sens.columns:
+            stab_counts = sens["stability"].value_counts()
+            stability_lines.append("  Stability across 4 investor scenarios:")
+            for label, count in stab_counts.items():
+                stability_lines.append(f"    {label}: {count} markets ({count/len(sens)*100:.0f}%)")
+            
+            # Find markets with perfect stability (rank_std == 0)
+            perfect_stable = sens[sens["rank_std"] == 0].index.tolist()
+            if perfect_stable:
+                stability_lines.append(f"\n  Perfectly stable markets (rank unchanged across all scenarios):")
+                stability_lines.append(f"    {', '.join(perfect_stable)}")
+
+        #  Assemble 
+        sep = "-" * 60
+
+        summary = "\n".join([
+            sep,
+            "RENEWABLE ENERGY INVESTMENT ANALYZER",
+            "Executive Summary — Emerging Markets Clean Power Opportunity",
+            sep,
+            f"Date:      {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            f"Period:    2018–2023 (6-year means)",
+            f"Countries: {len(df)} across 3 regions",
+            f"Indicators: 13 (updated: modern renewables, fossil electricity share, fuel imports)",
+            "",
+            "Archetype thresholds: Ready Markets (≥70) · Transition (40–70) · Watch & Wait (<40)",
+            "",
+            sep,
+            "TOP 5 INVESTMENT OPPORTUNITIES",
+            sep,
+            *top5_lines,
+            "",
+            sep,
+            "MARKET ARCHETYPES",
+            sep,
+            *arch_lines,
+            "",
+            sep,
+            "REGIONAL SUMMARY",
+            sep,
+            *region_lines,
+            "",
+            sep,
+            "RANK STABILITY",
+            sep,
+            *stability_lines,
+            "",
+            sep,
+            "OUTPUT FILES",
+            sep,
+            "  data/processed/indicators.csv             6-year means (13 indicators)",
+            "  data/processed/normalized_indicators.csv  0-100 normalised scores",
+            "  outputs/market_scores.csv                  Balanced scenario scores",
+            "  outputs/sensitivity_analysis.csv           Cross-scenario comparison (4 scenarios)",
+            "  outputs/market_clusters.csv                Cluster assignments (threshold-based)",
+            "  outputs/executive_summary.txt              This file",
+            sep,
+        ])
+
+        out_path = Path("outputs/executive_summary.txt")
+        out_path.write_text(summary, encoding="utf-8")
+        print(f"  ✓ Saved → {out_path}")
+        print(f"\n{summary[:800]}\n  ...")
+
+    except Exception as exc:
+        print(f"  ⚠ Could not generate summary: {exc}")
+
+        out_path = Path("outputs/executive_summary.txt")
+        out_path.write_text(summary, encoding="utf-8")
+        print(f"  ✓ Saved → {out_path}")
+        print(f"\n{summary[:600]}\n  ...")
+
+    except Exception as exc:
+        print(f"  ⚠ Could not generate summary: {exc}")
+
+
+# ── Pipeline ───────────────────────────────────────────────────────────────
+
+# Ordered list of (step_number, display_name, script_filename)
+PIPELINE_STEPS = [
+    (1, "Data Ingestion",  "data_ingestion.py"),
+    (2, "Preprocessing",   "preprocessing.py"),
+    (3, "Scoring",         "scoring.py"),
+    (4, "Clustering",      "clustering.py"),
+]
+
+
+def run_pipeline() -> None:
+    """Execute all pipeline steps in order, then write the executive summary."""
+    t0 = time.time()
+
+    print(f"\n{'=' * 60}")
+    print("RENEWABLE ENERGY INVESTMENT ANALYZER")
+    print("Pipeline Orchestrator  ·  2018–2023  ·  20 markets  ·  13 indicators")
+    print(f"{'=' * 60}")
+
+    ensure_output_dirs()
+
+    for step_num, step_name, script in PIPELINE_STEPS:
+        if not run_step(step_num, step_name, script):
+            print(f"\n  Pipeline aborted at step {step_num} — {step_name}")
+            sys.exit(1)
+
+    generate_executive_summary()
+
+    elapsed = time.time() - t0
+    print(f"\n{'=' * 60}")
+    print(f"PIPELINE COMPLETE  ·  {elapsed:.1f} s")
+    print(f"{'=' * 60}")
+    print("\n  Run 'python app.py' to launch the interactive dashboard")
+    print(f"{'=' * 60}\n")
+
+
+# ── Entry point ────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    try:
+        run_pipeline()
+    except KeyboardInterrupt:
+        print("\n  Pipeline interrupted by user")
+        sys.exit(1)
+    except Exception:
+        traceback.print_exc()
+        sys.exit(1)
+```
+
+## 7.3 Reproducibility
+
+#### **Dependencies:**
+
+See `requirements.txt` for the full package list.
+
+#### **Pipeline execution:**
+
+``` bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the full pipeline in one command
+python main.py
+
+# Or run individual modules in order
+python data_ingestion.py   # Fetch World Bank data via API
+python preprocessing.py    # Imputation, winsorisation, normalisation
+python scoring.py          # Weighted scoring across four scenarios
+python clustering.py       # K-Means archetype segmentation
+
+# Launch interactive dashboard
+python app.py              
+```
+
+#### **Data provenance:**
+
+All indicators are retrieved programmatically from the World Bank Open Data API (`wbgapi`). No manual data entry at any stage. Full lineage is documented in `data_ingestion.py`.
+
+#### **Orchestration:**
+
+`main.py` runs the full pipeline end-to-end (data ingestion through clustering) and writes all outputs to the `outputs/` directory. Individual modules can also be run independently for debugging or partial re-runs.
+
+# Conclusion
+
+This analysis challenges the assumption that emerging markets offer a broad, diversified opportunity set for renewable energy investment. The data tells a more concentrated — and more actionable — story.
+
+::::::::::: columns
+:::: {.column width="32%"}
+::: {.callout-note appearance="minimal"}
+### The Governance Gate
+
+Business environment scores are the primary differentiator. The **49.6-point gap** between Ready Markets (99.5) and Transition Markets (49.9) confirms that markets below a minimum governance threshold are not investable on realistic development timelines, regardless of energy demand growth or decarbonisation potential. Governance is the primary filter, not one factor among many.
+:::
+::::
+
+::: {.column width="2%"}
+:::
+
+:::: {.column width="32%"}
+::: {.callout-note appearance="minimal"}
+### The Concentration Imperative
+
+Only **2 of 20** markets (10%) qualify as Ready Markets. Capital should concentrate here rather than be spread across a portfolio of marginal opportunities. Malaysia and Chile are the right near-term deployments — the data leaves little room for debate. A further 15 markets require structural improvements, while 3 face fundamental barriers.
+:::
+::::
+
+::: {.column width="2%"}
+:::
+
+:::: {.column width="32%"}
+::: {.callout-note appearance="minimal"}
+### The Robustness Confirmation
+
+Rank stability analysis confirms this is not a modelling artefact. Malaysia and Chile hold rank #1 and #2 in every scenario with standard deviation zero. That convergence is the most credible signal this framework produces.
+:::
+::::
+:::::::::::
