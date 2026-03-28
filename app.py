@@ -846,112 +846,97 @@ def tab_overview():
     watch_n = (src_df["cluster_label"] == "Watch & Wait").sum()
     
     return html.Div([
-        # Three KPI cards
+        # Simple KPI row (just counts)
         html.Div([
-            kpi_card(f"{ready_n} / 20",
-                     f"markets qualify as Ready Markets ({ready_n/20*100:.0f}% of the sample)",
-                     "Concentration, not diversification. Only Malaysia and Chile score high enough to justify investment today. "
-                     f"A further {transition_n} markets require structural improvements.",
-                     "Focus on Malaysia & Chile now"),
-            kpi_card("49.6 pts",
-                     "governance gap between Ready and Transition Markets",
-                     "Governance is the primary gatekeeper. Markets below a minimum governance threshold are not investable "
-                     "regardless of energy demand or decarbonisation potential.",
-                     "Screen for governance first"),
-            kpi_card("0.0",
-                     "rank standard deviation for Malaysia & Chile across all four scenarios",
-                     "The result is robust across all investor profiles (from impact-first to risk-averse).",
-                     "No-regret deployment, act immediately"),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
-                  "gap": "20px", "marginBottom": "24px"}),
-
-        # Strategic implication callout
-        html.Div([
-            html.Span("Strategic implication:", 
-                      style={"fontWeight": "700", "color": NAVY, "marginRight": "8px"}),
-            f"Capital should concentrate in the strongest markets rather than being spread across marginal opportunities. "
-            f"For the {transition_n} Transition Markets, the best approach is to monitor and wait, with clear conditions "
-            f"for re-entering when governance scores improve. The {watch_n} Watch & Wait markets face fundamental barriers "
-            f"that make them non-viable on realistic timelines.",
-        ], style={
-            "background": "#FFF8EC", "border": f"1px solid {GOLD}",
-            "borderLeft": f"4px solid {GOLD2}", "borderRadius": "3px",
-            "padding": "16px 20px", "fontSize": "14px", "color": "#3D3D3D",
-            "marginBottom": "32px", "lineHeight": "1.5",
-        }),
+            html.Div([
+                html.Div(f"{ready_n} / 20", style={
+                    "fontSize": "32px", "fontWeight": "800", "color": CLUSTER_COLORS["Ready Markets"], 
+                    "marginBottom": "4px"
+                }),
+                html.Div("Ready Markets", style={"fontSize": "13px", "color": "#666666", "fontWeight": "500"}),
+            ], style={"textAlign": "center", "flex": "1", "padding": "20px 16px", 
+                      "background": "white", "borderRadius": "8px", "border": f"1px solid {CLUSTER_COLORS['Ready Markets']}30",
+                      "borderTop": f"4px solid {CLUSTER_COLORS['Ready Markets']}"}),
+            html.Div([
+                html.Div(f"{transition_n} / 20", style={
+                    "fontSize": "32px", "fontWeight": "800", "color": CLUSTER_COLORS["Transition Markets"], 
+                    "marginBottom": "4px"
+                }),
+                html.Div("Transition Markets", style={"fontSize": "13px", "color": "#666666", "fontWeight": "500"}),
+            ], style={"textAlign": "center", "flex": "1", "padding": "20px 16px",
+                      "background": "white", "borderRadius": "8px", "border": f"1px solid {CLUSTER_COLORS['Transition Markets']}30",
+                      "borderTop": f"4px solid {CLUSTER_COLORS['Transition Markets']}"}),
+            html.Div([
+                html.Div(f"{watch_n} / 20", style={
+                    "fontSize": "32px", "fontWeight": "800", "color": CLUSTER_COLORS["Watch & Wait"], 
+                    "marginBottom": "4px"
+                }),
+                html.Div("Watch & Wait", style={"fontSize": "13px", "color": "#666666", "fontWeight": "500"}),
+            ], style={"textAlign": "center", "flex": "1", "padding": "20px 16px",
+                      "background": "white", "borderRadius": "8px", "border": f"1px solid {CLUSTER_COLORS['Watch & Wait']}30",
+                      "borderTop": f"4px solid {CLUSTER_COLORS['Watch & Wait']}"}),
+        ], style={"display": "flex", "gap": "20px", "marginBottom": "32px"}),
 
         # Rankings chart
         html.Div([
-            header_block("Results", "Investment Attractiveness Rankings: All 20 Markets",
+            header_block("Results", "Investment Attractiveness Rankings", 
                          "Balanced scenario: Which markets score well overall?"),
             dcc.Graph(figure=chart_rankings(src_df), config={"displayModeBar": False}),
         ], style={**CARD_STYLE, "marginBottom": "24px"}),
 
-        # Governance scatter with R²
+        # Score Decomposition
         html.Div([
-            header_block("Core Finding", "The Governance Gate",
-                         "Business environment quality separates investable markets from non-investable"),
+            header_block("Decomposition", "Score Decomposition: What drives the top 2 rankings?",
+                         "Each segment shows the weighted contribution of one dimension to the total score"),
+            dcc.Graph(figure=chart_decomposition(src_df), config={"displayModeBar": False}),
+        ], style={**CARD_STYLE, "marginBottom": "24px"}),
+
+        # Governance scatter
+        html.Div([
+            header_block("Core Finding", "The Governance Gate", 
+                         "Business environment score vs total score"),
             dcc.Graph(figure=chart_governance_scatter(src_df), config={"displayModeBar": False}),
         ], style={**CARD_STYLE, "marginBottom": "24px"}),
 
-        # Archetype summary row with profile descriptions
+        # Styled archetype cards
         html.Div([
             html.Div([
                 html.Div("Ready Markets", style={
-                    "fontSize": "11px", "fontWeight": "700",
-                    "color": CLUSTER_COLORS["Ready Markets"],
-                    "textTransform": "uppercase", "letterSpacing": "1px",
-                    "marginBottom": "4px",
+                    "fontSize": "13px", "fontWeight": "700", "color": CLUSTER_COLORS["Ready Markets"],
+                    "textTransform": "uppercase", "letterSpacing": "1px", "marginBottom": "12px"
                 }),
-                html.Div(f"n = {ready_n}  ·  Avg. score: {src_df[src_df['cluster_label']=='Ready Markets']['total_score'].mean():.1f}",
-                         style={"fontSize": "13px", "color": NAVY, "fontWeight": "600",
-                                "marginBottom": "6px"}),
-                html.Div("Malaysia, Chile",
-                         style={"fontSize": "12px", "color": "#555555"}),
-                html.Div("Strong across all dimensions. Governance scores above 98 place these markets "
-                        "in a category of their own.",
-                         style={"fontSize": "12px", "color": "#666666", "marginTop": "8px", "lineHeight": "1.4"}),
-            ], style={
-                **CARD_STYLE, "borderTop": f"4px solid {CLUSTER_COLORS['Ready Markets']}",
-                "padding": "18px", "background": "#F0FDF4",
-            }),
+                html.Div("Malaysia, Chile", style={"fontSize": "14px", "color": "#2C3E50", "fontWeight": "500"}),
+                html.Div([
+                    html.Span("2 countries", style={"fontSize": "11px", "color": "#1C6B45", "background": "#E8F5E9", 
+                                                    "padding": "2px 8px", "borderRadius": "12px"})
+                ], style={"marginTop": "12px"}),
+            ], style={**CARD_STYLE, "padding": "20px", "borderLeft": f"4px solid {CLUSTER_COLORS['Ready Markets']}",
+                      "background": "linear-gradient(135deg, #FFFFFF 0%, #F9F9F9 100%)"}),
             html.Div([
                 html.Div("Transition Markets", style={
-                    "fontSize": "11px", "fontWeight": "700",
-                    "color": CLUSTER_COLORS["Transition Markets"],
-                    "textTransform": "uppercase", "letterSpacing": "1px",
-                    "marginBottom": "4px",
+                    "fontSize": "13px", "fontWeight": "700", "color": CLUSTER_COLORS["Transition Markets"],
+                    "textTransform": "uppercase", "letterSpacing": "1px", "marginBottom": "12px"
                 }),
-                html.Div(f"n = {transition_n}  ·  Avg. score: {src_df[src_df['cluster_label']=='Transition Markets']['total_score'].mean():.1f}",
-                         style={"fontSize": "13px", "color": NAVY, "fontWeight": "600",
-                                "marginBottom": "6px"}),
-                html.Div("Thailand, Vietnam, Mexico, Indonesia, Ghana, Senegal, Côte d'Ivoire, "
-                        "Bangladesh, Peru, Morocco, Colombia, Philippines, Brazil, Cambodia, Tanzania",
-                         style={"fontSize": "12px", "color": "#555555"}),
-                html.Div("Strong demand signals but governance gaps require mitigation.",
-                         style={"fontSize": "12px", "color": "#666666", "marginTop": "8px", "lineHeight": "1.4"}),
-            ], style={
-                **CARD_STYLE, "borderTop": f"4px solid {CLUSTER_COLORS['Transition Markets']}",
-                "padding": "18px", "background": "#FFFBEB",
-            }),
+                html.Div("Thailand, Vietnam, Mexico, Indonesia, Ghana, Senegal, Côte d'Ivoire, Bangladesh, Peru, Morocco, Colombia, Philippines, Brazil, Cambodia, Tanzania", 
+                         style={"fontSize": "12px", "color": "#555555", "lineHeight": "1.5"}),
+                html.Div([
+                    html.Span("15 countries", style={"fontSize": "11px", "color": "#C8914D", "background": "#FFF3E0", 
+                                                    "padding": "2px 8px", "borderRadius": "12px"})
+                ], style={"marginTop": "12px"}),
+            ], style={**CARD_STYLE, "padding": "20px", "borderLeft": f"4px solid {CLUSTER_COLORS['Transition Markets']}",
+                      "background": "linear-gradient(135deg, #FFFFFF 0%, #F9F9F9 100%)"}),
             html.Div([
                 html.Div("Watch & Wait", style={
-                    "fontSize": "11px", "fontWeight": "700",
-                    "color": CLUSTER_COLORS["Watch & Wait"],
-                    "textTransform": "uppercase", "letterSpacing": "1px",
-                    "marginBottom": "4px",
+                    "fontSize": "13px", "fontWeight": "700", "color": CLUSTER_COLORS["Watch & Wait"],
+                    "textTransform": "uppercase", "letterSpacing": "1px", "marginBottom": "12px"
                 }),
-                html.Div(f"n = {watch_n}  ·  Avg. score: {src_df[src_df['cluster_label']=='Watch & Wait']['total_score'].mean():.1f}",
-                         style={"fontSize": "13px", "color": NAVY, "fontWeight": "600",
-                                "marginBottom": "6px"}),
-                html.Div("Nigeria, Ethiopia, Kenya",
-                         style={"fontSize": "12px", "color": "#555555"}),
-                html.Div("Structural barriers prevent near-term viability.",
-                         style={"fontSize": "12px", "color": "#666666", "marginTop": "8px", "lineHeight": "1.4"}),
-            ], style={
-                **CARD_STYLE, "borderTop": f"4px solid {CLUSTER_COLORS['Watch & Wait']}",
-                "padding": "18px", "background": "#FEF2F2",
-            }),
+                html.Div("Nigeria, Ethiopia, Kenya", style={"fontSize": "14px", "color": "#2C3E50", "fontWeight": "500"}),
+                html.Div([
+                    html.Span("3 countries", style={"fontSize": "11px", "color": "#B03A2E", "background": "#FFEBEE", 
+                                                    "padding": "2px 8px", "borderRadius": "12px"})
+                ], style={"marginTop": "12px"}),
+            ], style={**CARD_STYLE, "padding": "20px", "borderLeft": f"4px solid {CLUSTER_COLORS['Watch & Wait']}",
+                      "background": "linear-gradient(135deg, #FFFFFF 0%, #F9F9F9 100%)"}),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr", "gap": "20px"}),
     ])
 
@@ -973,32 +958,10 @@ def tab_rankings():
     table_data = table_data.sort_values("Rank")
 
     return html.Div([
-        # Rankings bar chart
-        html.Div([
-            header_block("Rankings", "Investment Attractiveness Rankings: All 20 Markets",
-                         "Balanced scenario · Colour bands indicate archetype"),
-            dcc.Graph(id="rankings-chart",
-                      figure=chart_rankings(src_df),
-                      config={"displayModeBar": False}),
-        ], style={**CARD_STYLE, "marginBottom": "24px"}),
-
-        # Dot plot
-        html.Div([
-            header_block("Dimensions", "Dimensional Performance: All 20 Markets",
-                         "Dot size and colour intensity encode score magnitude · Dashed line marks score = 50"),
-            dcc.Graph(figure=chart_dotplot(src_df), config={"displayModeBar": False}),
-        ], style={**CARD_STYLE, "marginBottom": "24px"}),
-
-        # Score decomposition
-        html.Div([
-            header_block("Decomposition", "Score Decomposition: What drives the top 2 rankings?",
-                         "Each segment shows the weighted contribution of one dimension to the total score"),
-            dcc.Graph(figure=chart_decomposition(src_df), config={"displayModeBar": False}),
-        ], style={**CARD_STYLE, "marginBottom": "24px"}),
 
         # Complete data table
         html.Div([
-            header_block("Appendix", "Complete Rankings — All 20 Markets with Dimension Scores and Archetype", None),
+            header_block("Rankings", "Complete Rankings: All 20 Markets with Dimension Scores and Archetype", None),
             dash_table.DataTable(
                 data=table_data.to_dict("records"),
                 columns=[{"name": c, "id": c, "type": "numeric" if c not in
@@ -1032,6 +995,16 @@ def tab_rankings():
                 sort_action="native",
             ),
         ], style=CARD_STYLE),
+
+        # Dot plot
+        html.Div([
+            header_block("Dimensions", "Dimensional Performance: All 20 Markets",
+                         "Dot size and colour intensity encode score magnitude · Dashed line marks score = 50"),
+            dcc.Graph(figure=chart_dotplot(src_df), config={"displayModeBar": False}),
+        ], style={**CARD_STYLE, "marginBottom": "24px"}),
+
+    
+        
     ])
 
 # ── Tab 3: Sensitivity Analysis ────────────────────────────────────────────
@@ -1060,30 +1033,7 @@ def tab_sensitivity():
                   "background": "white", "border": "1px solid #EBEBEB",
                   "borderRadius": "3px"}),
 
-        # Sensitivity dot plot
-        html.Div([
-            header_block("Sensitivity Analysis", "Rank Stability Across Four Investor Scenarios",
-                         "Top 14 markets · Line span = min–max range · Hollow circle = average rank"),
-            dcc.Graph(figure=chart_sensitivity(sensitivity_df),
-                      config={"displayModeBar": False}),
-        ], style={**CARD_STYLE, "marginBottom": "24px"}),
-
-        # Stability insight callout
-        html.Div([
-            html.Span("The stability insight: ", 
-                      style={"fontWeight": "700", "color": NAVY}),
-            "Malaysia and Chile hold rank #1 and #2 in every scenario with a standard deviation of zero. "
-            "A pension fund (Risk-Averse) and a growth equity firm (Growth-Focused) arrive at the same two "
-            "top markets through entirely different analytical lenses, confirming these rankings reflect "
-            "genuine market quality, not a modelling choice.",
-        ], style={
-            "background": "#F0FDF4", "border": "1px solid #1C6B4540",
-            "borderLeft": f"4px solid {CLUSTER_COLORS['Ready Markets']}",
-            "borderRadius": "3px", "padding": "16px 20px",
-            "fontSize": "14px", "color": "#3D3D3D", "marginBottom": "24px", "lineHeight": "1.5",
-        }),
-
-        # Stability table
+         # Stability table
         html.Div([
             header_block("Detail", "Rank Stability Statistics — Top 14 Markets", None),
             dash_table.DataTable(
@@ -1117,6 +1067,16 @@ def tab_sensitivity():
                 sort_action="native",
             ),
         ], style=CARD_STYLE),
+
+        # Sensitivity dot plot
+        html.Div([
+            header_block("Sensitivity Analysis", "Rank Stability Across Four Investor Scenarios",
+                         "Top 14 markets · Line span = min–max range · Hollow circle = average rank"),
+            dcc.Graph(figure=chart_sensitivity(sensitivity_df),
+                      config={"displayModeBar": False}),
+        ], style={**CARD_STYLE, "marginBottom": "24px"}),
+        
+        
     ])
 
 # ── Tab 4: Market Archetypes ──────────────────────────────────────────────
