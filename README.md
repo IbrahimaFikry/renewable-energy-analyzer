@@ -1,5 +1,7 @@
 # Renewable Energy Investment Analyzer
 
+[![Live Dashboard](https://img.shields.io/badge/Live-Dashboard-brightgreen)](https://renewable-energy-analyzer.onrender.com)
+
 A quantitative market prioritization framework for emerging-market renewable energy investment. Built for a European clean energy developer screening 20 markets across Southeast Asia, Africa, and Latin America for solar and wind deployment opportunities.
 
 The pipeline fetches 13 World Bank indicators, normalizes them to a common 0–100 scale, scores markets across four strategic dimensions, tests rankings under four investor scenarios, and segments markets into three investment archetypes using a hybrid approach (K-Means + thresholds). An interactive Dash dashboard and a Quarto HTML report present the findings.

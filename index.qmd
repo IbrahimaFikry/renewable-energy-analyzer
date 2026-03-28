@@ -33,6 +33,7 @@ citation-location: margin
 title-block-banner: "#151931"
 title-block-banner-color: "#D4A96A"
 ---
+<base target="_blank">
 
 ```{python}
 #| echo: false
@@ -218,6 +219,10 @@ kpi_df = pd.DataFrame({
 **Strategic implication**: Capital should concentrate in the strongest markets rather than being spread across marginal opportunities. For the 15 Transition Markets, the best approach is to monitor and wait, with clear conditions for re-entering when governance scores improve. The 3 Watch & Wait markets face fundamental barriers that make them non-viable on realistic timelines.
 :::
 
+::: {.callout-note appearance="minimal"}
+**Interactive Dashboard:** Explore the full results dynamically at  
+🔗 [renewable-energy-analyzer.onrender.com](https://renewable-energy-analyzer.onrender.com)
+:::
 ------------------------------------------------------------------------
 
 # 1. Strategic Context
@@ -1481,7 +1486,18 @@ def color_archetype_cell(val):
 )
 ```
 
-## 7.2 Pipeline codes
+## 7.2 Interactive Dashboard
+
+A live interactive dashboard is available at:  
+[https://renewable-energy-analyzer.onrender.com](https://renewable-energy-analyzer.onrender.com)
+
+The dashboard allows you to:
+- Explore rankings across all 20 markets
+- Test custom weight scenarios in real time
+- View dimensional performance and archetype profiles
+- Compare rank stability across investor profiles
+
+## 7.3 Pipeline codes
 
 #### **Configuration**
 
@@ -3527,7 +3543,7 @@ if __name__ == "__main__":
         sys.exit(1)
 ```
 
-## 7.3 Reproducibility
+## 7.4 Reproducibility
 
 #### **Dependencies:**
 
