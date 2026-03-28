@@ -33,6 +33,7 @@ citation-location: margin
 title-block-banner: "#151931"
 title-block-banner-color: "#D4A96A"
 ---
+
 <base target="_blank">
 
 ```{python}
@@ -220,9 +221,10 @@ kpi_df = pd.DataFrame({
 :::
 
 ::: {.callout-note appearance="minimal"}
-**Interactive Dashboard:** Explore the full results dynamically at  
+**Interactive Dashboard:** Explore the full results dynamically at\
 🔗 [renewable-energy-analyzer.onrender.com](https://renewable-energy-analyzer.onrender.com)
 :::
+
 ------------------------------------------------------------------------
 
 # 1. Strategic Context
@@ -365,8 +367,13 @@ It is not under-weighted—it acts as a threshold constraint. Markets below a mi
 
 ## 2.2 Processing Pipeline
 
-Raw World Bank data passes through 4 sequential steps before scoring. :::: column-margin ::: {.callout-note appearance="simple"} The pipeline ensures all indicators are on a common 0–100 scale before weighted aggregation, with missing values imputed regionally and outliers winsorised to prevent distortion. ::: ::::
+Raw World Bank data passes through 4 sequential steps before scoring.
 
+:::: column-margin
+::: {.callout-note appearance="simple"}
+The pipeline ensures all indicators are on a common 0–100 scale before weighted aggregation, with missing values imputed regionally and outliers winsorised to prevent distortion.
+:::
+::::
 ```{python}
 #| echo: false
 
@@ -1488,14 +1495,15 @@ def color_archetype_cell(val):
 
 ## 7.2 Interactive Dashboard
 
-A live interactive dashboard is available at:  
-[https://renewable-energy-analyzer.onrender.com](https://renewable-energy-analyzer.onrender.com)
+A live interactive dashboard is available at:\
+<https://renewable-energy-analyzer.onrender.com>
 
 The dashboard allows you to:
-- Explore rankings across all 20 markets
-- Test custom weight scenarios in real time
-- View dimensional performance and archetype profiles
-- Compare rank stability across investor profiles
+
+-   Explore rankings across all 20 markets
+-   Test custom weight scenarios in real time
+-   View dimensional performance and archetype profiles
+-   Compare rank stability across investor profiles
 
 ## 7.3 Pipeline codes
 
