@@ -167,7 +167,7 @@ src_df = clusters_df.copy()
 
 # Executive Summary {.unnumbered}
 
-The data reveals 3 findings that shape the investment thesis:
+The data highlights 3 key insights that guide the investment strategy:
 
 ```{python}
 #| echo: false
@@ -216,7 +216,7 @@ kpi_df = pd.DataFrame({
 ```
 
 ::: {.callout-tip appearance="simple"}
-**Strategic implication**: Capital should concentrate in the strongest markets rather than being spread across marginal opportunities. For the 15 Transition Markets, the best approach is to monitor and wait, with clear conditions for re-entering when governance scores improve. The 3 Watch & Wait markets face fundamental barriers that make them non-viable on realistic timelines.
+**Strategic implication**: Investment should focus on the strongest markets instead of being spread across marginal opportunities. For the 15 Transition Markets, the right approach is to monitor them and wait, with clear conditions to re-enter when governance improves. The 3 Watch & Wait markets face major challenges that make them non-viable in the near term.
 :::
 
 ::: {.callout-note appearance="minimal"}
