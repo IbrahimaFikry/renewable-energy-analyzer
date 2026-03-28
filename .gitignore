@@ -10,11 +10,11 @@ ENV/
 .venv
 
 # Data files (optional - comment out if you want to include sample data)
-data/raw/
-data/processed/
+#data/raw/
+#data/processed/
 
 # Outputs (optional - comment out if you want to include sample outputs)
-outputs/
+#outputs/
 
 # IDE
 .vscode/

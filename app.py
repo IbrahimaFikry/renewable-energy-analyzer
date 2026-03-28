@@ -2,7 +2,7 @@
 app.py
 ------
 Renewable Energy Investment Analyzer — Interactive Dashboard
-Updated with new indicators (13) and threshold-based archetypes (2 Ready, 15 Transition, 3 Watch & Wait)
+
 """
 
 import re
@@ -165,7 +165,7 @@ def load_data():
 
 clusters_df, sensitivity_df = load_data()
 
-# ── UPDATED Fallback static data with new scores ──────────────────────────────────
+# ──  Fallback static data  ──────────────────────────────────
 
 FALLBACK = pd.DataFrame({
     "country_code": ["MYS","CHL","THA","VNM","MEX","IDN","GHA","SEN","CIV","BGD",
@@ -195,7 +195,7 @@ FALLBACK = pd.DataFrame({
          52.42,92.07,12.58,54.27,37.77,77.24,81.84,40.53,76.01,45.03],
 }).set_index("country_code")
 
-# UPDATED sensitivity fallback with new stability data
+#  sensitivity fallback data
 FALLBACK_SENSITIVITY = pd.DataFrame({
     "country_name":        ["Malaysia","Chile","Thailand","Vietnam","Mexico","Indonesia",
                             "Ghana","Senegal","Côte d'Ivoire","Bangladesh","Peru","Morocco",
@@ -743,11 +743,11 @@ TAB_SEL = dict(
     borderBottom=f"3px solid {GOLD}", background="transparent", color=NAVY,
 )
 
-# ── Layout ─────────────────────────────────────────────────────────────────
+#  Layout 
 
 app.layout = html.Div([
 
-    # ── Header ──────────────────────────────────────────────────────────
+    #  Header 
     html.Div([
         html.Div([
             html.Div([
@@ -849,7 +849,7 @@ def tab_overview():
         # Three KPI cards
         html.Div([
             kpi_card(f"{ready_n} / 20",
-                     f"markets qualify as Ready Markets — {ready_n/20*100:.0f}% of the sample",
+                     f"markets qualify as Ready Markets ({ready_n/20*100:.0f}% of the sample)",
                      "Concentration, not diversification. Only Malaysia and Chile score high enough to justify investment today. "
                      f"A further {transition_n} markets require structural improvements.",
                      "Focus on Malaysia & Chile now"),
@@ -860,7 +860,7 @@ def tab_overview():
                      "Screen for governance first"),
             kpi_card("0.0",
                      "rank standard deviation for Malaysia & Chile across all four scenarios",
-                     "The result is robust across all investor profiles — from impact-first to risk-averse.",
+                     "The result is robust across all investor profiles (from impact-first to risk-averse).",
                      "No-regret deployment, act immediately"),
         ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr",
                   "gap": "20px", "marginBottom": "24px"}),
@@ -1298,6 +1298,7 @@ def update_custom(mo, dc, be, es):
     return chart_rankings(src_df, custom_weights=weights)
 
 # ── Run ────────────────────────────────────────────────────────────────────
+server = app.server
 
 if __name__ == "__main__":
     print("\n" + "=" * 60)
@@ -1308,4 +1309,4 @@ if __name__ == "__main__":
     print(f"  Archetypes: {dict(src_df['cluster_label'].value_counts())}")
     print("\n  http://localhost:8050")
     print("  Ctrl+C to stop\n")
-    app.run(debug=False, port=8050, dev_tools_silence_routes_logging=True)
+    app.run(debug=False, host='0.0.0.0', port=8050, dev_tools_silence_routes_logging=True)
