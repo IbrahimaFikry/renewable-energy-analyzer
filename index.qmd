@@ -11,7 +11,7 @@ format:
     include-after-body: footer.html
     df-print: paged
     code-fold: true
-    code-tools: true
+    #code-tools: true
     code-link: true
     smooth-scroll: false
     code-overflow: wrap
