@@ -14,10 +14,11 @@ format:
     code-fold: true
     code-tools: true
     code-link: true
-    smooth-scroll: true
+    smooth-scroll: false
     code-overflow: wrap
     code-summary: "Show Code"
-    self-contained: true
+    self-contained: true 
+    #embed-resources: false
     grid:
       margin-width: 280px
       body-width: 920px
@@ -27,14 +28,12 @@ execute:
   echo: true
   warning: false
   message: false
-  cache: true
+  cache: refresh
 reference-location: margin
 citation-location: margin
 title-block-banner: "#151931"
 title-block-banner-color: "#D4A96A"
 ---
-
-<base target="_blank">
 
 ```{python}
 #| echo: false
@@ -222,7 +221,7 @@ kpi_df = pd.DataFrame({
 
 ::: {.callout-note appearance="minimal"}
 **Interactive Dashboard:** Explore the full results dynamically at\
-🔗 [renewable-energy-analyzer.onrender.com](https://renewable-energy-analyzer.onrender.com)
+🔗 <a href="https://renewable-energy-analyzer.onrender.com" target="_blank">Interactive Dashboard</a>
 :::
 
 ------------------------------------------------------------------------
@@ -3619,3 +3618,4 @@ Rank stability analysis confirms this is not a modelling artefact. Malaysia and 
 :::
 ::::
 :::::::::::
+
