@@ -583,7 +583,6 @@ To check whether the rankings depend too much on the selected weights, we run th
 
 ```{python}
 #| echo: false
-#| label: tbl-scenarios
 
 scenarios_meta = pd.DataFrame({
     'Scenario': ['Balanced', 'Impact-First', 'Growth-Focused', 'Risk-Averse'],
