@@ -2,7 +2,6 @@
 title: "WHERE TO INVEST IN RENEWABLE ENERGY? MACRO-LEVEL MARKET SCREEN"
 subtitle: "A Quantitative Market Prioritization Framework"
 author: "Ibrahima Fikry Diallo"
-date: today
 toc: true
 toc-location: left
 toc-depth: 3
@@ -1495,7 +1494,7 @@ def color_archetype_cell(val):
 ## 7.2 Interactive Dashboard
 
 A live interactive dashboard is available at:\
-<https://renewable-energy-analyzer.onrender.com>
+<a href="https://renewable-energy-analyzer.onrender.com" target="_blank">Interactive Dashboard</a>
 
 The dashboard allows you to:
 
