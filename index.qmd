@@ -1515,10 +1515,6 @@ The dashboard allows you to:
 #| eval: false
 
 # config.yaml
-# -----------
-# Renewable Energy Investment Analyzer — project configuration
-# Business case: European renewable energy developer screening emerging
-# markets for solar/wind investment and grid infrastructure deployment.
 
 # ── Project metadata ───────────────────────────────────────────────────────
 project:
