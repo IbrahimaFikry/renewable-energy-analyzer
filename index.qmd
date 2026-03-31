@@ -1515,13 +1515,6 @@ The dashboard allows you to:
 
 # config.yaml
 
-# ── Project metadata ───────────────────────────────────────────────────────
-project:
-  name:    Renewable Energy Market Analyzer
-  version: 3.0
-  sector:  Renewable Energy & Clean Power
-  client:  European Clean Energy Developer
-
 # ── Markets ────────────────────────────────────────────────────────────────
 # 20 emerging markets across three regions. ISO-3 codes throughout.
 countries:
@@ -3546,16 +3539,34 @@ if __name__ == "__main__":
 
 ## 7.4 Reproducibility
 
-#### **Dependencies:**
+:::: column-margin
+::: {.callout-note appearance="simple"}
 
-See `requirements.txt` for the full package list.
+The project repository is available on Github at the following link:
+<a href="https://github.com/IbrahimaFikry/renewable-energy-analyzer" target="_blank">Github repository</a>
+
+:::
+::::
+
+#### **Installation:**
+
+```bash
+# Clone the repository
+git clone https://github.com/IbrahimaFikry/renewable-energy-analyzer.git
+cd renewable-energy-analyzer
+
+# Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate        # macOS / Linux
+venv\Scripts\activate           # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
 
 #### **Pipeline execution:**
 
 ``` bash
-# Install dependencies
-pip install -r requirements.txt
-
 # Run the full pipeline in one command
 python main.py
 
